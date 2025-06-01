@@ -2,7 +2,7 @@
 
 #include "stm32f411xe.h"
 
-#define TICKS_IN_US     ((SystemCoreClock) * (0.000001))
+#define TICKS_IN_US     16
 
 void DelaySec(uint32_t sec)
 {
@@ -18,16 +18,12 @@ void DelayMs(uint32_t msec)
 
 void DelayUs(uint32_t usec)
 {
-    SysTick->LOAD = (TICKS_IN_US - 1);
+    SysTick->LOAD = usec * TICKS_IN_US - 1;
     SysTick->VAL = 0;
-    SysTick->CTRL |= SysTick_CTRL_CLKSOURCE_Msk;
-    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk;
 
-    for (uint32_t i = 0; i < usec; i++)
-    {
-        while ((SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) == 0);
-    }
+    while ((SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) == 0);
 
-    SysTick->CTRL &= ~(SysTick_CTRL_ENABLE_Msk);
+    SysTick->CTRL = 0;
 }
 
