@@ -134,6 +134,6 @@ void GpioToggle(const Gpio_t* const obj);
  * [in] - handler - callback function pointer
  * [out] - none
  * */
-void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irqPriority, const GpioIrqHandler* const handler);
+void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irqPriority, GpioIrqHandler* const handler);
 
 #endif /* GPIO_H */

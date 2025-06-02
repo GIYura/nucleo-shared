@@ -137,7 +137,7 @@ void GpioToggle(const Gpio_t* const obj)
     }
 }
 
-void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irqPriority, const GpioIrqHandler* const handler)
+void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irqPriority, GpioIrqHandler* const handler)
 {
     assert(obj != NULL);
     assert(handler != NULL);
