@@ -121,7 +121,7 @@ uint32_t GpioRead(const Gpio_t* const obj)
     return value ? 1 : 0;
 }
 
-void GpioToogle(const Gpio_t* const obj)
+void GpioToggle(const Gpio_t* const obj)
 {
     assert(obj != NULL);
 
@@ -137,7 +137,7 @@ void GpioToogle(const Gpio_t* const obj)
     }
 }
 
-void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irqPriority, GpioIrqHandler* handler)
+void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irqPriority, const GpioIrqHandler* const handler)
 {
     assert(obj != NULL);
     assert(handler != NULL);

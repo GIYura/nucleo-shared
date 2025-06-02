@@ -2,7 +2,6 @@
 #define GPIO_H
 
 #include "stm32f411xe.h"
-
 #include "gpio-name.h"
 
 /* Port names */
@@ -13,7 +12,7 @@
 #define PORTE   GPIOE
 #define PORTH   GPIOH
 
-/* port clock enable */
+/* Port clock enable */
 #define GPIO_CLOCK_ENABLE_PORTA (RCC->AHB1ENR |= (1 << 0))
 #define GPIO_CLOCK_ENABLE_PORTB (RCC->AHB1ENR |= (1 << 1))
 #define GPIO_CLOCK_ENABLE_PORTC (RCC->AHB1ENR |= (1 << 2))
@@ -21,6 +20,7 @@
 #define GPIO_CLOCK_ENABLE_PORTE (RCC->AHB1ENR |= (1 << 4))
 #define GPIO_CLOCK_ENABLE_PORTH (RCC->AHB1ENR |= (1 << 7))
 
+/* Pin states */
 typedef enum
 {
     PIN_STATE_LOW = 0,
@@ -91,6 +91,16 @@ typedef struct
     GpioIrqHandler* irqHandler;
 } Gpio_t;
 
+/*Brief: Gpio initializaion
+ * [in] - obj - pointer to gpio object
+ * [in] - pinName - name of the pin defined in gpio-name.h
+ * [in] - mode - gpio mode
+ * [in] - type - gpio type
+ * [in] - speed - gpio speed
+ * [in] - config - gpio config
+ * [in] - value - gpio default value
+ * [out] - none
+ * */
 void GpioInit(  Gpio_t* const obj,
                 PIN_NAMES pinName,
                 PIN_MODES mode,
@@ -99,9 +109,31 @@ void GpioInit(  Gpio_t* const obj,
                 PIN_CONFIGS config,
                 uint32_t value);
 
+/*Brief: Gpio write
+ * [in] - obj - pointer to gpio object
+ * [in] - value - new gpio value
+ * [out] - none
+ * */
 void GpioWrite(const Gpio_t* const obj, uint32_t value);
+
+/*Brief: Gpio read
+ * [in] - obj - pointer to gpio object
+ * [out] - value - gpio state
+ * */
 uint32_t GpioRead(const Gpio_t* const obj);
-void GpioToogle(const Gpio_t* const obj);
-void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irqPriority, GpioIrqHandler* handler);
+
+/*Brief: Gpio toggle
+ * [in] - obj - pointer to gpio object
+ * [out] - none
+ * */
+void GpioToggle(const Gpio_t* const obj);
+
+/*Brief: Gpio IRQ initialization
+ * [in] - irqMode - IRQ mode
+ * [in] - irqPriority - IRQ priority
+ * [in] - handler - callback function pointer
+ * [out] - none
+ * */
+void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irqPriority, const GpioIrqHandler* const handler);
 
 #endif /* GPIO_H */
