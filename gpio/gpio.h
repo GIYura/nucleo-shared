@@ -91,7 +91,7 @@ typedef struct
     GpioIrqHandler* irqHandler;
 } Gpio_t;
 
-/*Brief: Gpio initializaion
+/*Brief: Gpio initialization
  * [in] - obj - pointer to gpio object
  * [in] - pinName - name of the pin defined in gpio-name.h
  * [in] - mode - gpio mode
