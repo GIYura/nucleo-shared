@@ -20,6 +20,27 @@
 #define GPIO_CLOCK_ENABLE_PORTE (RCC->AHB1ENR |= (1 << 4))
 #define GPIO_CLOCK_ENABLE_PORTH (RCC->AHB1ENR |= (1 << 7))
 
+/* Alternate gpio */
+typedef enum
+{
+    PIN_AF_0 = 0,
+    PIN_AF_1,
+    PIN_AF_2,
+    PIN_AF_3,
+    PIN_AF_4,
+    PIN_AF_5,
+    PIN_AF_6,
+    PIN_AF_7,
+    PIN_AF_8,
+    PIN_AF_9,
+    PIN_AF_10,
+    PIN_AF_11,
+    PIN_AF_12,
+    PIN_AF_13,
+    PIN_AF_14,
+    PIN_AF_15,
+} PIN_AF;
+
 /* Pin states */
 typedef enum
 {

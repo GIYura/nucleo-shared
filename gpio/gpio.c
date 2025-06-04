@@ -72,7 +72,7 @@ void GpioInit(  Gpio_t* const obj,
         }
         else
         {
-            obj->port->AFR[1] |= (value << (obj->pinIndex * 4));
+            obj->port->AFR[1] |= (value << ((obj->pinIndex % 8) * 4));
         }
     }
 
