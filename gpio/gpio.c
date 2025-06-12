@@ -3,9 +3,9 @@
 
 #include "gpio.h"
 
-#define INTERRUP_MAX    16
+#define INTERRUPT_MAX    16
 
-static Gpio_t* m_GpioIrq[INTERRUP_MAX];
+static Gpio_t* m_GpioIrq[INTERRUPT_MAX];
 
 void GpioInit(  Gpio_t* const obj,
                 PIN_NAMES pinName,
@@ -27,32 +27,32 @@ void GpioInit(  Gpio_t* const obj,
 
     if ((obj->pinName & 0xF0) == 0x00)
     {
-        obj->port = PORTA;
+        obj->port = GPIOA;
         GPIO_CLOCK_ENABLE_PORTA;
     }
     else if ((obj->pinName & 0xF0) == 0x10)
     {
-        obj->port = PORTB;
+        obj->port = GPIOB;
         GPIO_CLOCK_ENABLE_PORTB;
     }
     else if ((obj->pinName & 0xF0) == 0x20)
     {
-        obj->port = PORTC;
+        obj->port = GPIOC;
         GPIO_CLOCK_ENABLE_PORTC;
     }
     else if ((obj->pinName & 0xF0) == 0x30)
     {
-        obj->port = PORTD;
+        obj->port = GPIOD;
         GPIO_CLOCK_ENABLE_PORTD;
     }
     else if ((obj->pinName & 0xF0) == 0x40)
     {
-        obj->port = PORTE;
+        obj->port = GPIOE;
         GPIO_CLOCK_ENABLE_PORTE;
     }
     else if ((obj->pinName & 0xF0) == 0x50)
     {
-        obj->port = PORTH;
+        obj->port = GPIOH;
         GPIO_CLOCK_ENABLE_PORTH;
     }
     else
@@ -147,7 +147,7 @@ void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irq
         return;
     }
 
-    for (uint8_t i = 0; i < INTERRUP_MAX; i++)
+    for (uint8_t i = 0; i < INTERRUPT_MAX; i++)
     {
         if (m_GpioIrq[i] != NULL && m_GpioIrq[i]->pinIndex == obj->pinIndex)
         {

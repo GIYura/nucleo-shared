@@ -4,14 +4,6 @@
 #include "stm32f411xe.h"
 #include "gpio-name.h"
 
-/* Port names */
-#define PORTA   GPIOA
-#define PORTB   GPIOB
-#define PORTC   GPIOC
-#define PORTD   GPIOD
-#define PORTE   GPIOE
-#define PORTH   GPIOH
-
 /* Port clock enable */
 #define GPIO_CLOCK_ENABLE_PORTA (RCC->AHB1ENR |= (1 << 0))
 #define GPIO_CLOCK_ENABLE_PORTB (RCC->AHB1ENR |= (1 << 1))
