@@ -60,13 +60,18 @@ void GpioInit(  Gpio_t* const obj,
         assert(0);
     }
 
+    obj->port->OSPEEDR &= ~(0x03 << (obj->pinIndex * 2));
     obj->port->OSPEEDR |= (speed << (obj->pinIndex * 2));
+
+    obj->port->PUPDR &= ~(0x03 << (obj->pinIndex * 2));
     obj->port->PUPDR |= (type << (obj->pinIndex * 2));
+
+    obj->port->MODER &= ~(0x03 << (obj->pinIndex * 2));
     obj->port->MODER |= (mode << (obj->pinIndex * 2));
 
     if (mode == PIN_MODE_ALTERNATE)
     {
-        if (obj->pinIndex <= 7)
+        if (obj->pinIndex < 8)
         {
             obj->port->AFR[0] |= (value << (obj->pinIndex * 4));
         }
