@@ -21,23 +21,31 @@ typedef enum
     BAUD_COUNT
 } BAUD_RATE;
 
+typedef enum
+{
+    UART_1 = 0,
+    UART_6,
+    UART_COUNT
+} UART_NAMES;
+
 typedef struct
 {
     USART_TypeDef* usart;
-} Usart_t;
+    UART_NAMES uartName;
+} Uart_t;
 
-/*Brief: USART initialization
- * [in] - obj - pointer to USART object
+/*Brief: UART initialization
+ * [in] - obj - pointer to UART object
  * [in] - baud - baud rate
  * [out] - none
  * */
-void UartInit(Usart_t* const obj, BAUD_RATE baud);
+void UartInit(Uart_t* const obj, UART_NAMES uartName, BAUD_RATE baud);
 
-/*Brief: USART send buffer
- * [in] - obj - pointer to USART object
+/*Brief: UART send buffer
+ * [in] - obj - pointer to UART object
  * [in] - buff - pointer to string
  * [out] - none
  * */
-void UartWrite(const Usart_t* const obj, const char* buff);
+void UartWrite(const Uart_t* const obj, const char* buff);
 
 #endif /* UART_H */

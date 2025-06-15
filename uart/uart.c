@@ -5,12 +5,16 @@
 #include "uart.h"
 #include "gpio.h"
 
-static Gpio_t m_gpio;
+#define UART_1_CLOCK_ENABLE (RCC->APB2ENR |= (RCC_APB2ENR_USART1EN))
+#define UART_6_CLOCK_ENABLE (RCC->APB2ENR |= (RCC_APB2ENR_USART6EN))
+
+static Gpio_t m_GpioTx;
+static Gpio_t m_GpioRx;
 
 static bool m_initialized = false;
 
 /*Brief: Send single character */
-static void PutChar(const Usart_t* const obj, char ch)
+static void PutChar(const Uart_t* const obj, char ch)
 {
     while (!(obj->usart->SR & USART_SR_TXE)){}
     {
@@ -19,7 +23,7 @@ static void PutChar(const Usart_t* const obj, char ch)
 }
 
 /*Brief: Converts baud rate in to register value */
-static uint16_t BaudRateToRegisterValue(BAUD_RATE baud)
+static uint16_t ComputeBaudRate(uint32_t pclk, BAUD_RATE baud)
 {
     uint32_t baudrate = 0;
 
@@ -65,7 +69,7 @@ static uint16_t BaudRateToRegisterValue(BAUD_RATE baud)
             break;
     }
 
-    float usartDiv = (float)SystemCoreClock / (16.0f * baudrate);
+    float usartDiv = (float)pclk / (16.0f * baudrate);
 
     uint32_t mantissa = (uint32_t)usartDiv;
     uint32_t fraction = (uint32_t)((usartDiv - mantissa) * 16.0f + 0.5f);
@@ -79,24 +83,57 @@ static uint16_t BaudRateToRegisterValue(BAUD_RATE baud)
     return (mantissa << 4) | (fraction & 0x0F);
 }
 
-void UartInit(Usart_t* const obj, BAUD_RATE baud)
+void UartInit(Uart_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
 {
-    assert(baud < BAUD_COUNT);
     assert(obj != NULL);
+    assert(uartName < UART_COUNT);
+    assert(baud < BAUD_COUNT);
 
-    /* init PA9 (USART1 TX) */
-    GpioInit(&m_gpio, PA_9, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
+    switch (uartName)
+    {
+        case UART_1:
+            GpioInit(&m_GpioTx, PA_9, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
+            GpioInit(&m_GpioRx, PA_10, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
 
-    /* link USART1 instance */
-    obj->usart = USART1;
+            UART_1_CLOCK_ENABLE;
 
-    /* USART clock enable */
-    RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
+            obj->usart = USART1;
 
-    obj->usart->BRR = BaudRateToRegisterValue(baud);
+            obj->usart->BRR = ComputeBaudRate(SystemCoreClock, baud);
 
-    /* enable transmitter */
+            break;
+
+        case UART_6:
+            GpioInit(&m_GpioTx, PA_11, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_8);
+            GpioInit(&m_GpioRx, PA_12, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_8);
+
+            UART_6_CLOCK_ENABLE;
+
+            obj->usart = USART6;
+
+            obj->usart->BRR = ComputeBaudRate(SystemCoreClock, baud);
+
+            break;
+
+        default:
+            assert(false);
+            break;
+    }
+
+    /* transmitter enable */
     obj->usart->CR1 |= USART_CR1_TE;
+
+    /* receiver enable */
+    obj->usart->CR1 |= USART_CR1_RE;
+
+    /* format: 1 Start bit, 8 Data bits, n Stop bit */
+    obj->usart->CR1 &= ~(USART_CR1_M);
+
+    /* Parity control disabled */
+    obj->usart->CR1 &= ~(USART_CR1_PCE);
+
+    /* 1 Stop bit */
+    obj->usart->CR2 &= ~(USART_CR2_STOP);
 
     /* enable USART */
     obj->usart->CR1 |= USART_CR1_UE;
@@ -104,7 +141,7 @@ void UartInit(Usart_t* const obj, BAUD_RATE baud)
     m_initialized = true;
 }
 
-void UartWrite(const Usart_t* const obj, const char* buff)
+void UartWrite(const Uart_t* const obj, const char* buff)
 {
     assert(obj != NULL);
     assert(buff != NULL);
