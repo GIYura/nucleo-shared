@@ -11,16 +11,15 @@
 static Gpio_t m_GpioTx;
 static Gpio_t m_GpioRx;
 
+static Uart_t* m_UartIrq[UART_COUNT];
+
 static bool m_initialized = false;
 
-/*Brief: Send single character */
-static void PutChar(const Uart_t* const obj, char ch)
-{
-    while (!(obj->usart->SR & USART_SR_TXE)){}
-    {
-        obj->usart->DR = ch;
-    }
-}
+static void EnableTxInterrupt(Uart_t* const obj);
+static void DisableTxInterrupt(Uart_t* const obj);
+static void UartStart(Uart_t* const obj);
+static IRQn_Type GetIrqType(const Uart_t* const obj);
+static void UartOnInterrupt(Uart_t* const obj);
 
 /*Brief: Converts baud rate in to register value */
 static uint16_t ComputeBaudRate(uint32_t pclk, BAUD_RATE baud)
@@ -89,6 +88,9 @@ void UartInit(Uart_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
     assert(uartName < UART_COUNT);
     assert(baud < BAUD_COUNT);
 
+    obj->isTransmitting = false;
+    obj->uartName = uartName;
+
     switch (uartName)
     {
         case UART_1:
@@ -135,25 +137,121 @@ void UartInit(Uart_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
     /* 1 Stop bit */
     obj->usart->CR2 &= ~(USART_CR2_STOP);
 
+    /* oversampling by 16 */
+    obj->usart->CR1 &= ~(USART_CR1_OVER8);
+
     /* enable USART */
     obj->usart->CR1 |= USART_CR1_UE;
+
+    BufferCreate(&obj->txBuffer, &obj->txData, sizeof(obj->txData), sizeof(uint8_t), true);
+
+    m_UartIrq[obj->uartName] = obj;
 
     m_initialized = true;
 }
 
-void UartWrite(const Uart_t* const obj, const char* buff)
+void USART1_IRQHandler(void)
 {
-    assert(obj != NULL);
-    assert(buff != NULL);
+    UartOnInterrupt(m_UartIrq[UART_1]);
+}
 
-    if (!m_initialized)
+void USART6_IRQHandler(void)
+{
+    UartOnInterrupt(m_UartIrq[UART_6]);
+}
+
+void UartWrite(Uart_t* const obj, uint8_t* buffer, uint8_t size)
+{
+    for (uint8_t i = 0; i < size; i++)
     {
-        return;
+        BufferPut(&obj->txBuffer, &buffer[i], sizeof(uint8_t));
     }
 
-    while (*buff)
+    if (!obj->isTransmitting)
     {
-        PutChar(obj, *buff);
-        buff++;
+        obj->isTransmitting = true;
+
+        UartStart(obj);
     }
 }
+
+static void EnableTxInterrupt(Uart_t* const obj)
+{
+    assert(obj != NULL);
+
+    obj->usart->CR1 |= (USART_CR1_TXEIE);
+
+    NVIC_EnableIRQ(GetIrqType(obj));
+}
+
+static void DisableTxInterrupt(Uart_t* const obj)
+{
+    assert(obj != NULL);
+
+    obj->usart->CR1 &= ~(USART_CR1_TXEIE);
+
+    NVIC_DisableIRQ(GetIrqType(obj));
+}
+
+static void UartStart(Uart_t* const obj)
+{
+    assert(obj != NULL);
+
+    uint8_t item = 0;
+
+    if (BufferGet(&obj->txBuffer, &item, sizeof(item)))
+    {
+        obj->usart->DR = item;
+
+        EnableTxInterrupt(obj);
+    }
+    else
+    {
+        obj->isTransmitting = false;
+    }
+}
+
+static IRQn_Type GetIrqType(const Uart_t* const obj)
+{
+    assert(obj != NULL);
+
+    IRQn_Type result;
+
+    switch (obj->uartName)
+    {
+        case UART_1:
+            result = USART1_IRQn;
+            break;
+
+        case UART_6:
+            result = USART6_IRQn;
+            break;
+
+        default:
+            assert(0);
+            break;
+    }
+
+    return result;
+}
+
+static void UartOnInterrupt(Uart_t* const obj)
+{
+    uint8_t item = 0;
+
+    if ((obj->usart->SR & (USART_SR_TXE)) && (obj->usart->CR1 & (USART_CR1_TXEIE)))
+    {
+        if (BufferGet(&obj->txBuffer, &item, sizeof(item)))
+        {
+            obj->usart->DR = item;
+        }
+        else
+        {
+            obj->isTransmitting = false;
+
+            DisableTxInterrupt(obj);
+        }
+    }
+    /*TODO: RX */
+}
+

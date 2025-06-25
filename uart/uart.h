@@ -2,10 +2,20 @@
 #define UART_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "stm32f411xe.h"
 
+#include "buffer.h"
+
+#define TX_BUFFER_SIZE      1023
+
 /* USART baud rate supported */
+#if 0
+There might be an issue with writting data over UART on lower baudrate due to
+circular buffer might be flooded with data.
+Recommended baudrate: 921600.
+#endif
 typedef enum
 {
     BAUD_1200 = 0,
@@ -32,6 +42,9 @@ typedef struct
 {
     USART_TypeDef* usart;
     UART_NAMES uartName;
+    Buffer_t txBuffer;
+    uint8_t txData[TX_BUFFER_SIZE + 1];
+    volatile bool isTransmitting;
 } Uart_t;
 
 /*Brief: UART initialization
@@ -41,11 +54,12 @@ typedef struct
  * */
 void UartInit(Uart_t* const obj, UART_NAMES uartName, BAUD_RATE baud);
 
-/*Brief: UART send buffer
+/*Brief: Send message over UART
  * [in] - obj - pointer to UART object
- * [in] - buff - pointer to string
+ * [in] - buff - pointer to buffer
+ * [in] - size - buffer size
  * [out] - none
  * */
-void UartWrite(const Uart_t* const obj, const char* buff);
+void UartWrite(Uart_t* const obj, uint8_t* buffer, uint8_t size);
 
 #endif /* UART_H */
