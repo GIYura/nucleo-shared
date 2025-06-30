@@ -1,16 +1,35 @@
 #include <assert.h>
-#include <stdio.h>
-#include <stdarg.h>
+#include <string.h>
 
 #include "logger.h"
+#include "uart.h"
 
+static Uart_t m_uart;
 static LOG_LEVEL m_logLevel = LOG_LEVEL_DEBUG;
 
-static void LogGeneric(LOG_LEVEL level, const char* prefix, const char* fmt, va_list args);
+static const char* const PREFIX[] = { "[DBG]: ", "[INFO]:", "[WARN]: ", "[ERR]: " };
+
+static void LogGeneric(LOG_LEVEL level, const char* const prefix, const char* const message)
+{
+    if (m_logLevel < level || m_logLevel == LOG_LEVEL_NONE)
+    {
+        return;
+    }
+    const char* const newLine = "\r\n";
+
+    uint8_t len = strlen(prefix);
+    UartWrite(&m_uart, (uint8_t*)prefix, len);
+
+    len = strlen(message);
+    UartWrite(&m_uart, (uint8_t*)message, len);
+
+    len = strlen(newLine);
+    UartWrite(&m_uart, (uint8_t*)newLine, len);
+}
 
 void LogInit(void)
 {
-
+    UartInit(&m_uart, UART_1, BAUD_921600);
 }
 
 void LogSetLevel(LOG_LEVEL level)
@@ -20,29 +39,22 @@ void LogSetLevel(LOG_LEVEL level)
     m_logLevel = level;
 }
 
-#define DEFINE_LOG_FUNC(name, level, prefix)    \
-    void Log##name(const char* fmt, ...)        \
-    {                                           \
-        va_list args;                           \
-        va_start(args, fmt);                    \
-        LogGeneric(level, prefix, fmt, args);   \
-        va_end(args);                           \
-    }                                           \
-
-DEFINE_LOG_FUNC(Debug, LOG_LEVEL_DEBUG, "DBG")
-DEFINE_LOG_FUNC(Info, LOG_LEVEL_INFO, "INF")
-DEFINE_LOG_FUNC(Warn, LOG_LEVEL_WARN, "WRN")
-DEFINE_LOG_FUNC(Error, LOG_LEVEL_ERROR, "ERR")
-
-static void LogGeneric(LOG_LEVEL level, const char* prefix, const char* fmt, va_list args)
+void LogDebug(const char* const message)
 {
-    if (level < m_logLevel)
-    {
-        return;
-    }
-#if 0
-    char buffer[128];
-    int n = snprintf(buffer, sizeof(buffer), "[%s] ", prefix);
-    vsnprintf(&buffer[n], sizeof(buffer) - n, fmt, args);
-#endif
+    LogGeneric(LOG_LEVEL_DEBUG, PREFIX[LOG_LEVEL_DEBUG], message);
+}
+
+void LogInfo(const char* const message)
+{
+    LogGeneric(LOG_LEVEL_INFO, PREFIX[LOG_LEVEL_INFO], message);
+}
+
+void LogWarn(const char* const message)
+{
+    LogGeneric(LOG_LEVEL_WARN, PREFIX[LOG_LEVEL_WARN], message);
+}
+
+void LogError(const char* const message)
+{
+    LogGeneric(LOG_LEVEL_ERROR, PREFIX[LOG_LEVEL_ERROR], message);
 }
