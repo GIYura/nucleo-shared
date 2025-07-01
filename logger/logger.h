@@ -21,4 +21,7 @@ void LogInfo(const char* const message);
 void LogWarn(const char* const message);
 void LogError(const char* const message);
 
+void LogHex(uint32_t value);
+void LogDec(int32_t value);
+
 #endif /* LOGGER_H */
