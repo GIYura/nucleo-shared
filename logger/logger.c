@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "logger.h"
 #include "uart.h"
@@ -10,61 +11,27 @@ static LOG_LEVEL m_logLevel = LOG_LEVEL_DEBUG;
 const char* const NEW_LINE = "\r\n";
 static const char* const PREFIXES[] = { "[DBG]: ", "[INFO]:", "[WARN]: ", "[ERR]: " };
 
-static void NewLine(void)
-{
-    uint8_t len = strlen(NEW_LINE);
-    UartWrite(&m_uart, (uint8_t*)NEW_LINE, len);
-}
+static void PrintMessage(const char* const message);
+static void PrintChar(char ch);
+static void PrintHex(uint32_t value);
+static void PrintDec(int32_t value);
+static void PrintNewLine(void);
 
-static void LogGeneric(LOG_LEVEL level, const char* const prefix, const char* const message)
+static void PrintMessage(const char* const message)
 {
-    if (m_logLevel < level || m_logLevel == LOG_LEVEL_NONE)
-    {
-        return;
-    }
-
-    uint8_t len = strlen(prefix);
-    UartWrite(&m_uart, (uint8_t*)prefix, len);
+    uint8_t len = strlen(PREFIXES[m_logLevel]);
+    UartWrite(&m_uart, (uint8_t*)PREFIXES[m_logLevel], len);
 
     len = strlen(message);
     UartWrite(&m_uart, (uint8_t*)message, len);
-
-    NewLine();
 }
 
-void LogInit(void)
+static void PrintChar(char ch)
 {
-    UartInit(&m_uart, UART_1, BAUD_921600);
+    UartWrite(&m_uart, (uint8_t*)&ch, 1);
 }
 
-void LogSetLevel(LOG_LEVEL level)
-{
-    assert(level < LOG_LEVEL_NUMBER);
-
-    m_logLevel = level;
-}
-
-void LogDebug(const char* const message)
-{
-    LogGeneric(LOG_LEVEL_DEBUG, PREFIXES[LOG_LEVEL_DEBUG], message);
-}
-
-void LogInfo(const char* const message)
-{
-    LogGeneric(LOG_LEVEL_INFO, PREFIXES[LOG_LEVEL_INFO], message);
-}
-
-void LogWarn(const char* const message)
-{
-    LogGeneric(LOG_LEVEL_WARN, PREFIXES[LOG_LEVEL_WARN], message);
-}
-
-void LogError(const char* const message)
-{
-    LogGeneric(LOG_LEVEL_ERROR, PREFIXES[LOG_LEVEL_ERROR], message);
-}
-
-void LogHex(uint32_t value)
+static void PrintHex(uint32_t value)
 {
     const char* hex = "0123456789ABCDEF";
     char symbol;
@@ -80,11 +47,9 @@ void LogHex(uint32_t value)
             UartWrite(&m_uart, (uint8_t*)&symbol, sizeof(symbol));
         }
     }
-
-    NewLine();
 }
 
-void LogDec(int32_t value)
+static void PrintDec(int32_t value)
 {
     char buff[12];
     uint8_t i = 0;
@@ -105,6 +70,92 @@ void LogDec(int32_t value)
     {
         UartWrite(&m_uart, (uint8_t*)&buff[i], sizeof(char));
     }
+}
 
-    NewLine();
+static void PrintNewLine(void)
+{
+    uint8_t len = strlen(NEW_LINE);
+    UartWrite(&m_uart, (uint8_t*)NEW_LINE, len);
+}
+
+void LogInit(LOG_LEVEL level)
+{
+    assert(level < LOG_LEVEL_NUMBER);
+
+    UartInit(&m_uart, UART_1, BAUD_921600);
+
+    m_logLevel = level;
+}
+
+void LogPrint(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+
+    while (*fmt)
+    {
+        if (*fmt == '%')
+        {
+            fmt++;
+            switch (*fmt)
+            {
+                case 'd':
+                {
+                    int val = va_arg(args, int);
+                    PrintDec(val);
+                    break;
+                }
+
+                case 'u':
+                {
+                    uint32_t val = va_arg(args, uint32_t);
+                    PrintDec((int32_t)val);
+                    break;
+                }
+
+                case 'x':
+                {
+                    int val = va_arg(args, uint32_t);
+                    PrintHex(val);
+                    break;
+                }
+
+                case 's':
+                {
+                    char* str = va_arg(args, char*);
+                    PrintMessage(str);
+                    break;
+                }
+
+                case 'c':
+                {
+                    char ch = va_arg(args, int);
+                    PrintChar(ch);
+                    break;
+                }
+
+                case '%':
+                {
+                    PrintChar('%');
+                    break;
+                }
+
+                default:
+                {
+                    PrintChar('?');
+                    break;
+                }
+            }
+        }
+        else
+        {
+            PrintChar(*fmt);
+        }
+
+        fmt++;
+    }
+
+    PrintNewLine();
+
+    va_end(args);
 }

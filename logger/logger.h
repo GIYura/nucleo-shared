@@ -13,15 +13,16 @@ typedef enum
     LOG_LEVEL_NUMBER
 } LOG_LEVEL;
 
-void LogInit(void);
-void LogSetLevel(LOG_LEVEL level);
+/*Brief: Logger initialization
+ * [in] - level - logger level
+ * [out] - none
+ * */
+void LogInit(LOG_LEVEL level);
 
-void LogDebug(const char* const message);
-void LogInfo(const char* const message);
-void LogWarn(const char* const message);
-void LogError(const char* const message);
-
-void LogHex(uint32_t value);
-void LogDec(int32_t value);
+/*Brief: Send message
+ * [in] - fmt - supported formats: %u %d %x %s %c
+ * [out] - none
+ * */
+void LogPrint(const char *fmt, ...);
 
 #endif /* LOGGER_H */
