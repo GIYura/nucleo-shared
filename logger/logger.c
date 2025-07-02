@@ -7,22 +7,29 @@
 
 static Uart_t m_uart;
 static LOG_LEVEL m_logLevel = LOG_LEVEL_DEBUG;
+static bool m_isIdle = false;
 
 const char* const NEW_LINE = "\r\n";
 static const char* const PREFIXES[] = { "[DBG]: ", "[INFO]:", "[WARN]: ", "[ERR]: " };
 
+static void PrintPrefix(const char* const message);
 static void PrintMessage(const char* const message);
 static void PrintChar(char ch);
 static void PrintHex(uint32_t value);
 static void PrintDec(int32_t value);
 static void PrintNewLine(void);
 
-static void PrintMessage(const char* const message)
+static void PrintPrefix(const char* const message)
 {
     uint8_t len = strlen(PREFIXES[m_logLevel]);
     UartWrite(&m_uart, (uint8_t*)PREFIXES[m_logLevel], len);
+}
 
-    len = strlen(message);
+static void PrintMessage(const char* const message)
+{
+    PrintPrefix(PREFIXES[m_logLevel]);
+
+    uint8_t len = strlen(message);
     UartWrite(&m_uart, (uint8_t*)message, len);
 }
 
@@ -159,3 +166,16 @@ void LogPrint(const char *fmt, ...)
 
     va_end(args);
 }
+
+void LogFlush(void)
+{
+    while (!UartIdle(&m_uart));
+
+    m_isIdle = true;
+}
+
+bool LogIdle(void)
+{
+    return m_isIdle;
+}
+

@@ -2,6 +2,7 @@
 #define LOGGER_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum
 {
@@ -24,5 +25,17 @@ void LogInit(LOG_LEVEL level);
  * [out] - none
  * */
 void LogPrint(const char *fmt, ...);
+
+/*Brief: Wait until logger is Idle
+ * [in] - none
+ * [out] - none
+ * */
+void LogFlush(void);
+
+/*Brief: Check if logger is Idle
+ * [in] - none
+ * [out] - true - idle; false - otherwise (still transmitting)
+ * */
+bool LogIdle(void);
 
 #endif /* LOGGER_H */
