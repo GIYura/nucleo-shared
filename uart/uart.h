@@ -45,6 +45,7 @@ typedef struct
     Buffer_t txBuffer;
     uint8_t txData[TX_BUFFER_SIZE + 1];
     volatile bool isTransmitting;
+    volatile bool isTransmitCompeted;
 } Uart_t;
 
 /*Brief: UART initialization
@@ -61,5 +62,11 @@ void UartInit(Uart_t* const obj, UART_NAMES uartName, BAUD_RATE baud);
  * [out] - none
  * */
 void UartWrite(Uart_t* const obj, uint8_t* buffer, uint8_t size);
+
+/*Brief: Check if UART is in Idle state
+ * [in] - obj - pointer to UART object
+ * [out] - true - idle (free); fale - otherwise (busy)
+ * */
+bool UartIdle(Uart_t* const obj);
 
 #endif /* UART_H */
