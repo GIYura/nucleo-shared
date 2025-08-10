@@ -4,13 +4,17 @@ Contains SW modules shared accross projects.
 
 ### Structure
 
-- buffer - circular buffer
-- delay - blocking delay based on SysTick (sec, ms, us)
-- gpio - GPIO driver
-- hw-timer - HW timer driver (TIM1)
-- logger - non-blocking formatted logger based on UART1 (baud rate 921600)
-- mpu - memory protection unit control
-- pwm - PWM driver (based on TIM1)
-- spi - SPI driver
-- uart - UART driver
+| SW module name  |       Description           |             Notes            |
+|-----------------|-----------------------------|------------------------------|
+| buffer          | circular buffer             |                              |
+| delay           | blocking delay              | Based on SysTick (s, ms, us) |
+| gpio            | GPIO diver                  |                              |
+| hw-timer        | HW timer driver             | TODO                         |
+| logger          | Serial logger               | UART1 (921600-8N1)           |
+| mpu             | Memory Protection Unit      |                              |
+| pwm             | PWM driver                  | TIM1 (refactor)              |
+| spi             | SPI driver                  |                              |
+| uart            | UART driver                 |                              |
+| adxl345         | ADXL345 driver              |                              |
+| utils           | Helper macros               |                              |
 
