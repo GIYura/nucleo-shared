@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <string.h>
 
 #include "adxl345.h"
 #include "adxl345-regs.h"
@@ -9,8 +10,33 @@
 static Spi_t m_spi;
 static Gpio_t m_nss;
 
-static void ADXL_ReadRegister(uint8_t address, uint8_t* const value);
-static void ADXL_WriteRegister(uint8_t address, uint8_t value);
+typedef struct
+{
+    uint8_t tx[2];
+    uint8_t rx[2];
+    ADXL_RequestHandler_t callback;
+    void* userContext;
+} AdxlRequest_t;
+
+static AdxlRequest_t m_adxlRequest;
+
+static void SpiAppEventHandler(void* context)
+{
+    if (context == NULL)
+    {
+        GpioWrite(&m_nss, 1);
+        return;
+    }
+
+    AdxlRequest_t* req = (AdxlRequest_t*)context;
+
+    GpioWrite(&m_nss, 1);
+
+    if (req->callback)
+    {
+        req->callback(req->rx[1], req->userContext);
+    }
+}
 
 void ADXL_Init(void)
 {
@@ -18,55 +44,39 @@ void ADXL_Init(void)
 
     /* chip select gpio */
     GpioInit(&m_nss, PA_0, PIN_MODE_OUTPUT, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, 1);
+
+    memset(&m_adxlRequest.tx, 0, sizeof(m_adxlRequest.tx));
+    memset(&m_adxlRequest.rx, 0, sizeof(m_adxlRequest.rx));
+    m_adxlRequest.callback = NULL;
+    m_adxlRequest.userContext = NULL;
+
+    SpiRegisterRxHandler(&m_spi, &SpiAppEventHandler);
+    SpiRegisterTxHandler(&m_spi, &SpiAppEventHandler);
 }
 
-void ADXL_GetId(uint8_t* const id)
+void ADXL_ReadRegisterAsync(uint8_t address, ADXL_RequestHandler_t callback, void* context)
 {
-    uint8_t adxlId = 0;
-    ADXL_ReadRegister(ADXL345_DEVID, &adxlId);
+    m_adxlRequest.callback = callback;
+    m_adxlRequest.userContext = context;
 
-    *id = adxlId;
-}
-
-void ADXL_GetVector(void)
-{
-/*TODO: */
-}
-
-void ADXL_DumpRegisters(void)
-{
-    uint8_t regValue = 0;
-
-    ADXL_ReadRegister(ADXL345_DEVID, &regValue);
-
-    for (uint8_t regAddr = ADXL345_THRESH_TAP; regAddr <= ADXL345_FIFO_STATUS; regAddr++)
-    {
-        ADXL_ReadRegister(regAddr, &regValue);
-    }
-}
-
-static void ADXL_ReadRegister(uint8_t address, uint8_t* const value)
-{
-    uint8_t dummy = 0xFF;
-    uint8_t txBuffer[2] = { (0x80 | address), dummy };
-    uint8_t rxBuffer[2] = { 0 };
+    m_adxlRequest.tx[0] = 0x80 | address;
+    m_adxlRequest.tx[1] = 0xFF;
+    m_adxlRequest.rx[0] = 0;
+    m_adxlRequest.rx[1] = 0;
 
     GpioWrite(&m_nss, 0);
 
-    SpiTransfer(&m_spi, txBuffer, rxBuffer, sizeof(rxBuffer));
-
-    *value = rxBuffer[1];
-
-    GpioWrite(&m_nss, 1);
+    SpiTransfer_IT(&m_spi, m_adxlRequest.tx, m_adxlRequest.rx, sizeof(m_adxlRequest.rx), &m_adxlRequest);
 }
 
-static void ADXL_WriteRegister(uint8_t address, uint8_t value)
+void ADXL_WriteRegisterAsync(uint8_t address, void* value)
 {
-    uint8_t txBuffer[2] = { (0x00 | address), value };
+    uint8_t* regValue = (uint8_t*)value;
+
+    m_adxlRequest.tx[0] = 0x00 | address;
+    m_adxlRequest.tx[1] = *regValue;
 
     GpioWrite(&m_nss, 0);
 
-    SpiTransfer(&m_spi, txBuffer, NULL, sizeof(txBuffer));
-
-    GpioWrite(&m_nss, 1);
+    SpiTransfer_IT(&m_spi, m_adxlRequest.tx, NULL, sizeof(m_adxlRequest.tx), NULL);
 }
