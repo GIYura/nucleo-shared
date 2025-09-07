@@ -6,8 +6,10 @@ Contains SW modules shared accross projects.
 
 | SW module name  |       Description           |             Notes            |
 |-----------------|-----------------------------|------------------------------|
-| buffer          | circular buffer             |                              |
-| delay           | blocking delay              | Based on SysTick (s, ms, us) |
+| buffer          | Circular buffer             |                              |
+| assert          | Custom assertion            |                              |
+| delay           | Blocking delay              | Based on SysTick (s, ms, us) |
+| event           | Event queue                 |                              |
 | gpio            | GPIO diver                  |                              |
 | hw-timer        | HW timer driver             | TODO                         |
 | logger          | Serial logger               | UART1 (921600-8N1)           |
