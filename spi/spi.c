@@ -1,16 +1,9 @@
-#include <assert.h>
 #include <stddef.h>
 
+#include "assert.h"
 #include "delay.h"
 #include "spi.h"
 #include "ignore.h"
-
-typedef enum
-{
-    SPI_IDLE = 0,
-    SPI_BUSY_TX,
-    SPI_BUSY_RX
-} SPI_STATE;
 
 #define WAIT_FLAG_TIMEOUT_MAX   100 /* us */
 
@@ -44,30 +37,20 @@ static bool WaitFlagTimeout(volatile uint32_t* reg, uint32_t flag, bool state, u
 static void SpiClearOverrun(const Spi_t* const obj);
 
 static void SpiIrqHandler(Spi_t* const obj);
-static void SpiTxDoneHandler(Spi_t* const obj);
-static void SpiRxDoneHandler(Spi_t* const obj);
-static void SpiOverrunHandler(Spi_t* const obj);
+
 static IRQn_Type GetIrqType(const Spi_t* const obj);
 
 static Spi_t* m_SpiIrq[SPI_COUNT];
 
 uint32_t SpiInit(Spi_t* const obj, SPI_NAMES name, SPI_POLARITY polarity, SPI_PHASE phase, uint32_t deriredFrequencyHz)
 {
-    assert(obj != NULL);
-    assert(deriredFrequencyHz != 0);
+    ASSERT(obj != NULL);
+    ASSERT(deriredFrequencyHz != 0);
 
     uint32_t actualFreq = 0;
 
     obj->name = name;
     obj->initialized = false;
-    obj->txBuffer = NULL;
-    obj->txLen = 0;
-    obj->txState = SPI_IDLE;
-    obj->rxBuffer = NULL;
-    obj->rxLen = 0;
-    obj->rxState = SPI_IDLE;
-    obj->onRxDone = NULL;
-    obj->onTxDone = NULL;
 
     switch (name)
     {
@@ -117,7 +100,7 @@ uint32_t SpiInit(Spi_t* const obj, SPI_NAMES name, SPI_POLARITY polarity, SPI_PH
             break;
 
         default:
-            assert(false);
+            ASSERT(false);
             break;
     }
 
@@ -135,6 +118,10 @@ uint32_t SpiInit(Spi_t* const obj, SPI_NAMES name, SPI_POLARITY polarity, SPI_PH
 
     NVIC_EnableIRQ(GetIrqType(obj));
 
+    BufferCreate(&obj->queue, obj->transactions, sizeof(obj->transactions), sizeof(SpiTransaction_t), false);
+
+    obj->currentTransaction = NULL;
+
     obj->initialized = true;
 
     return actualFreq;
@@ -142,14 +129,18 @@ uint32_t SpiInit(Spi_t* const obj, SPI_NAMES name, SPI_POLARITY polarity, SPI_PH
 
 void SpiDeinit(Spi_t* const obj)
 {
+    ASSERT(obj != NULL);
+
     obj->initialized = false;
+
+    obj->currentTransaction = NULL;
 
     SpiDisable(obj);
 }
 
 bool SpiTransfer(Spi_t* const obj, const uint8_t* const txBuffer, uint8_t* const rxBuffer, uint8_t size)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     if (!obj->initialized)
     {
@@ -196,9 +187,31 @@ timeout:
     return false;
 }
 
+SPI_RESULT SpiTransfer_IT(Spi_t* const obj, SpiTransaction_t* transaction)
+{
+    ASSERT(obj != NULL);
+    ASSERT(transaction != NULL);
+
+    if (!obj->initialized)
+    {
+        return SPI_ERROR;
+    }
+
+    if (!BufferPut(&obj->queue, transaction, sizeof(SpiTransaction_t)))
+    {
+        return SPI_QUEUE_FULL;
+    }
+
+    SpiEnableRxInterrupt(obj);
+
+    SpiEnableTxInterrupt(obj);
+
+    return SPI_OK;
+}
+
 static void SpiGpioInit(Spi_t* const obj, PIN_NAMES miso, PIN_NAMES mosi, PIN_NAMES sck)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     if (obj->name == SPI_3 || obj->name == SPI_5)
     {
@@ -216,7 +229,7 @@ static void SpiGpioInit(Spi_t* const obj, PIN_NAMES miso, PIN_NAMES mosi, PIN_NA
 
 static void SpiMode(const Spi_t* const obj, SPI_POLARITY polarity, SPI_PHASE phase)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     if (polarity == CPOL_0)
     {
@@ -239,7 +252,7 @@ static void SpiMode(const Spi_t* const obj, SPI_POLARITY polarity, SPI_PHASE pha
 
 static void SpiFormat(const Spi_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     /* master mode */
     obj->instance->CR1 |= (SPI_CR1_MSTR);
@@ -269,6 +282,8 @@ static void SpiFormat(const Spi_t* const obj)
 
 static uint32_t SpiSpeed(const Spi_t* const obj, uint32_t deriredFrequencyHz)
 {
+    ASSERT(obj != NULL);
+
     uint32_t pclk = 0;
     uint32_t prescaler = 0;
     uint32_t brBits = 0;
@@ -320,7 +335,7 @@ static uint32_t SpiSpeed(const Spi_t* const obj, uint32_t deriredFrequencyHz)
 
 static void SpiClockEnable(const Spi_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     switch (obj->name)
     {
@@ -340,21 +355,21 @@ static void SpiClockEnable(const Spi_t* const obj)
             SPI_5_CLOCK_ENABLE;
             break;
         default:
-            assert(0);
+            ASSERT(false);
             break;
     }
 }
 
 static void SpiEnable(const Spi_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     obj->instance->CR1 |= SPI_CR1_SPE;
 }
 
 static void SpiDisable(const Spi_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     obj->instance->CR1 &= ~SPI_CR1_SPE;
 }
@@ -375,7 +390,7 @@ static bool WaitFlagTimeout(volatile uint32_t* reg, uint32_t flag, bool state, u
 
 static void SpiClearOverrun(const Spi_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     volatile uint32_t dummy = 0;
 
@@ -385,93 +400,81 @@ static void SpiClearOverrun(const Spi_t* const obj)
     IGNORE(dummy);
 }
 
-static void SpiRxDoneHandler(Spi_t* const obj)
+static void SpiIrqHandler(Spi_t* const obj)
 {
+    ASSERT(obj != NULL);
+
+    if (obj->currentTransaction == NULL)
+    {
+        SpiTransaction_t next;
+
+        if (!BufferGet(&obj->queue, &next, sizeof(SpiTransaction_t)))
+        {
+            SpiDisableTxInterrupt(obj);
+            SpiDisableRxInterrupt(obj);
+            return;
+        }
+
+        obj->currentTransaction = &next;
+
+        if (obj->currentTransaction->preTransaction != NULL)
+        {
+            (*obj->currentTransaction->preTransaction)(obj->currentTransaction->context);
+        }
+    }
+
+    SpiTransaction_t* t = obj->currentTransaction;
+
     if ((obj->instance->SR & SPI_SR_RXNE) && (obj->instance->CR2 & SPI_CR2_RXNEIE))
     {
-        if (obj->rxBuffer == NULL)
+        if (t->rxBuffer != NULL)
         {
-            volatile uint32_t dummy = 0;
-
-            dummy = obj->instance->DR;
-            IGNORE(dummy);
+            *(t->rxBuffer++) = (uint8_t)obj->instance->DR;
+            t->rxLen--;
         }
         else
         {
-            *(obj->rxBuffer) = (uint8_t)obj->instance->DR;
-            obj->rxBuffer++;
+            IGNORE(obj->instance->DR);
         }
 
-        obj->rxLen--;
-
-        if (obj->rxLen == 0)
-        {
-            SpiDisableRxInterrupt(obj);
-
-            obj->rxBuffer = NULL;
-            obj->rxState = SPI_IDLE;
-
-            if (obj->onRxDone != NULL)
-            {
-                (*obj->onRxDone)(obj->context);
-            }
-        }
-    }
-}
-
-static void SpiTxDoneHandler(Spi_t* const obj)
-{
-    if ((obj->instance->SR & SPI_SR_TXE) && (obj->instance->CR2 & SPI_CR2_TXEIE))
-    {
-        obj->instance->DR = *(obj->txBuffer);
-        obj->txLen--;
-        obj->txBuffer++;
-
-        if (obj->txLen == 0)
+        if (t->rxLen == 0 && t->txLen == 0)
         {
             SpiDisableTxInterrupt(obj);
+            SpiDisableRxInterrupt(obj);
 
-            obj->txBuffer = NULL;
-            obj->txState = SPI_IDLE;
-
-            if (obj->onTxDone != NULL)
+            if (t->postTransaction != NULL)
             {
-                (*obj->onTxDone)(obj->context);
+                (*t->postTransaction)(NULL);
+            }
+
+            obj->currentTransaction = NULL;
+
+            if (t->onTransactionDone != NULL)
+            {
+                (*t->onTransactionDone)(t->context);
             }
         }
     }
-}
 
-static void SpiOverrunHandler(Spi_t* const obj)
-{
-    if ((obj->instance->SR & SPI_SR_OVR) && (obj->instance->CR2 & SPI_CR2_ERRIE))
+    if ((obj->instance->SR & SPI_SR_TXE) && (obj->instance->CR2 & SPI_CR2_TXEIE))
     {
-        if (obj->txState != SPI_BUSY_TX)
+        if (t->txLen > 0)
         {
-            volatile uint32_t dummy = 0;
-
-            dummy = obj->instance->DR;
-            IGNORE(dummy);
-            dummy = obj->instance->SR;
-            IGNORE(dummy);
+            obj->instance->DR = *(t->txBuffer++);
+            t->txLen--;
         }
     }
-}
 
-static void SpiIrqHandler(Spi_t* const obj)
-{
-    assert(obj != NULL);
-
-    SpiRxDoneHandler(obj);
-
-    SpiTxDoneHandler(obj);
-
-    SpiOverrunHandler(obj);
+    if ((obj->instance->SR & SPI_SR_OVR) && (obj->instance->CR2 & SPI_CR2_ERRIE))
+    {
+        IGNORE(obj->instance->DR);
+        IGNORE(obj->instance->SR);
+    }
 }
 
 static IRQn_Type GetIrqType(const Spi_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     IRQn_Type result;
 
@@ -481,8 +484,24 @@ static IRQn_Type GetIrqType(const Spi_t* const obj)
             result = SPI1_IRQn;
             break;
 
+        case SPI_2:
+            result = SPI2_IRQn;
+            break;
+
+        case SPI_3:
+            result = SPI3_IRQn;
+            break;
+
+        case SPI_4:
+            result = SPI4_IRQn;
+            break;
+
+        case SPI_5:
+            result = SPI5_IRQn;
+            break;
+
         default:
-            assert(0);
+            ASSERT(false);
             break;
     }
 
@@ -491,28 +510,28 @@ static IRQn_Type GetIrqType(const Spi_t* const obj)
 
 static void SpiEnableTxInterrupt(const Spi_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     obj->instance->CR2 |= SPI_CR2_TXEIE;
 }
 
 static void SpiDisableTxInterrupt(const Spi_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     obj->instance->CR2 &= ~SPI_CR2_TXEIE;
 }
 
 static void SpiEnableRxInterrupt(const Spi_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     obj->instance->CR2 |= SPI_CR2_RXNEIE;
 }
 
 static void SpiDisableRxInterrupt(const Spi_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     obj->instance->CR2 &= ~SPI_CR2_RXNEIE;
 }
@@ -540,41 +559,4 @@ void SPI4_IRQHandler(void)
 void SPI5_IRQHandler(void)
 {
     SpiIrqHandler(m_SpiIrq[SPI_5]);
-}
-
-uint8_t SpiTransfer_IT(Spi_t* const obj, uint8_t* txBuffer, uint8_t* rxBuffer, uint8_t size, void* context)
-{
-    assert(obj != NULL);
-    assert(txBuffer != NULL);
-
-    if (obj->txState == SPI_IDLE && obj->rxState == SPI_IDLE)
-    {
-        obj->txBuffer = txBuffer;
-        obj->txLen = size;
-
-        obj->rxBuffer = rxBuffer;
-        obj->rxLen = size;
-
-        obj->txState = SPI_BUSY_TX;
-        obj->rxState = SPI_BUSY_RX;
-
-        obj->context = context;
-
-        SpiEnableRxInterrupt(obj);
-        SpiEnableTxInterrupt(obj);
-
-        return (uint8_t)SPI_IDLE;
-    }
-
-    return ((uint8_t)SPI_BUSY_TX | (uint8_t)SPI_BUSY_RX);
-}
-
-void SpiRegisterRxHandler(Spi_t* const obj, SpiEventHandler_t callback)
-{
-    obj->onRxDone = callback;
-}
-
-void SpiRegisterTxHandler(Spi_t* const obj, SpiEventHandler_t callback)
-{
-    obj->onTxDone = callback;
 }

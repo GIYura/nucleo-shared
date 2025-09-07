@@ -7,6 +7,17 @@
 #include "stm32f411xe.h"
 
 #include "gpio.h"
+#include "buffer.h"
+
+#define SPI_TRANSACTION_QUEUE_SIZE 31
+
+typedef enum
+{
+    SPI_OK = 0,
+    SPI_BUSY,
+    SPI_QUEUE_FULL,
+    SPI_ERROR
+} SPI_RESULT;
 
 typedef enum
 {
@@ -39,24 +50,30 @@ typedef struct
 } SpiGpio_t;
 
 typedef void (*SpiEventHandler_t)(void* context);
+typedef void (*SpiCsCallback_t)(void* context);
+
+typedef struct
+{
+    uint8_t* txBuffer;
+    uint8_t* rxBuffer;
+    uint16_t txLen;
+    uint16_t rxLen;
+    SpiEventHandler_t onTransactionDone;
+    SpiCsCallback_t preTransaction;
+    SpiCsCallback_t postTransaction;
+    void* context;
+} SpiTransaction_t;
 
 typedef struct
 {
     SPI_TypeDef* instance;
     SPI_NAMES name;
     SpiGpio_t gpio;
-    uint8_t* txBuffer;          /* store appl. tx buffer address */
-    uint8_t* rxBuffer;          /* store appl. rx buffer address */
-    uint32_t txLen;
-    uint32_t rxLen;
-    uint8_t txState;
-    uint8_t rxState;
+    Buffer_t queue;
+    SpiTransaction_t transactions[SPI_TRANSACTION_QUEUE_SIZE + 1];
+    SpiTransaction_t* currentTransaction;
     bool initialized;
-    SpiEventHandler_t onRxDone;
-    SpiEventHandler_t onTxDone;
-    void* context;
 } Spi_t;
-
 
 /*Brief: SPI initialization
  * [in] - obj - pointer to SPI object
@@ -89,22 +106,8 @@ bool SpiTransfer(Spi_t* const obj, const uint8_t* const txBuffer, uint8_t* const
  * [in] - rxBuffer - buffer to receive
  * [in] - size - buffer size
  * [in] - context - pointer to context (storage for response)
- * [out] - true - transfer successful; false - otherwise
+ * [out] - spi transaction state
  * */
-uint8_t SpiTransfer_IT(Spi_t* const obj, uint8_t* txBuffer, uint8_t* rxBuffer, uint8_t size, void* context);
-
-/*Brief: Register SPI on receive done callback
- * [in] - obj - pointer to SPI object
- * [in] - callback - callback on receive done
- * [out] - none
- * */
-void SpiRegisterRxHandler(Spi_t* const obj, SpiEventHandler_t callback);
-
-/*Brief: Register SPI on transmit done callback
- * [in] - obj - pointer to SPI object
- * [in] - callback - callback on transmit done
- * [out] - none
- * */
-void SpiRegisterTxHandler(Spi_t* const obj, SpiEventHandler_t callback);
+SPI_RESULT SpiTransfer_IT(Spi_t* const obj, SpiTransaction_t* transaction);
 
 #endif /* SPI_H */
