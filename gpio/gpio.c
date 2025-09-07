@@ -1,6 +1,6 @@
-#include <assert.h>
 #include <stddef.h>
 
+#include "assert.h"
 #include "gpio.h"
 
 #define INTERRUPT_MAX    16
@@ -15,7 +15,7 @@ void GpioInit(  Gpio_t* const obj,
                 PIN_CONFIGS config,
                 uint32_t value)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     if (pinName == NC)
     {
@@ -57,7 +57,7 @@ void GpioInit(  Gpio_t* const obj,
     }
     else
     {
-        assert(0);
+        ASSERT(0);
     }
 
     obj->port->OSPEEDR &= ~(0x03 << (obj->pinIndex * 2));
@@ -98,7 +98,7 @@ void GpioInit(  Gpio_t* const obj,
 
 void GpioWrite(const Gpio_t* const obj, uint32_t value)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     if (obj->pinName == NC)
     {
@@ -117,7 +117,7 @@ void GpioWrite(const Gpio_t* const obj, uint32_t value)
 
 uint32_t GpioRead(const Gpio_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     uint16_t value = obj->port->IDR;
 
@@ -128,7 +128,7 @@ uint32_t GpioRead(const Gpio_t* const obj)
 
 void GpioToggle(const Gpio_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     uint32_t odr = (obj->port->ODR);
 
@@ -144,8 +144,8 @@ void GpioToggle(const Gpio_t* const obj)
 
 void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irqPriority, GpioIrqHandler* const handler)
 {
-    assert(obj != NULL);
-    assert(handler != NULL);
+    ASSERT(obj != NULL);
+    ASSERT(handler != NULL);
 
     if (obj->pinName == NC)
     {

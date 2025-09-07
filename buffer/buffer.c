@@ -1,6 +1,7 @@
-#include <assert.h>
 #include <stddef.h>
 #include <string.h>
+
+#include "assert.h"
 #include "buffer.h"
 
 static uint16_t NextIndex(const Buffer_t* const buffer, uint16_t index)
@@ -20,8 +21,8 @@ static bool BufferIsEmpty(const Buffer_t* const buffer)
 
 void BufferCreate(Buffer_t* const buffer, void* const data, uint16_t length, uint16_t typeSize, bool overwrite)
 {
-    assert(buffer != NULL);
-    assert(data != NULL);
+    ASSERT(buffer != NULL);
+    ASSERT(data != NULL);
 
     buffer->data = data;
     buffer->end = 0;
@@ -60,7 +61,7 @@ uint16_t BufferCount(const Buffer_t* const buffer)
 
 bool BufferPut(Buffer_t* const buffer, const void* const data, uint16_t size)
 {
-    assert(buffer->data != NULL && data != NULL);
+    ASSERT(buffer->data != NULL && data != NULL);
 
     if (BufferIsFull(buffer))
     {
@@ -79,9 +80,9 @@ bool BufferPut(Buffer_t* const buffer, const void* const data, uint16_t size)
 
 bool BufferGet(Buffer_t* const buffer, void* data, uint16_t size)
 {
-    assert(buffer->data != NULL);
-    assert(data != NULL);
-    assert(size == buffer->typeSize);
+    ASSERT(buffer->data != NULL);
+    ASSERT(data != NULL);
+    ASSERT(size == buffer->typeSize);
 
     if (BufferIsEmpty(buffer))
     {
