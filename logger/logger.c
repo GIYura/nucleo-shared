@@ -1,7 +1,7 @@
-#include <assert.h>
 #include <string.h>
 #include <stdarg.h>
 
+#include "assert.h"
 #include "logger.h"
 #include "uart.h"
 
@@ -87,7 +87,7 @@ static void PrintNewLine(void)
 
 void LogInit(LOG_LEVEL level)
 {
-    assert(level < LOG_LEVEL_NUMBER);
+    ASSERT(level < LOG_LEVEL_NUMBER);
 
     UartInit(&m_uart, UART_1, BAUD_921600);
 

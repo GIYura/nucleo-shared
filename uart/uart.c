@@ -1,7 +1,7 @@
-#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "assert.h"
 #include "uart.h"
 #include "gpio.h"
 
@@ -88,9 +88,9 @@ static uint16_t ComputeBaudRate(uint32_t pclk, BAUD_RATE baud)
 
 void UartInit(Uart_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
 {
-    assert(obj != NULL);
-    assert(uartName < UART_COUNT);
-    assert(baud < BAUD_COUNT);
+    ASSERT(obj != NULL);
+    ASSERT(uartName < UART_COUNT);
+    ASSERT(baud < BAUD_COUNT);
 
     obj->isTransmitting = false;
     obj->uartName = uartName;
@@ -123,7 +123,7 @@ void UartInit(Uart_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
             break;
 
         default:
-            assert(false);
+            ASSERT(false);
             break;
     }
 
@@ -169,6 +169,8 @@ void USART6_IRQHandler(void)
 
 void UartWrite(Uart_t* const obj, uint8_t* buffer, uint8_t size)
 {
+    ASSERT(obj != NULL);
+
     for (uint8_t i = 0; i < size; i++)
     {
         BufferPut(&obj->txBuffer, &buffer[i], sizeof(uint8_t));
@@ -185,35 +187,35 @@ void UartWrite(Uart_t* const obj, uint8_t* buffer, uint8_t size)
 
 static void EnableTxInterrupt(Uart_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     obj->usart->CR1 |= (USART_CR1_TXEIE);
 }
 
 static void DisableTxInterrupt(Uart_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     obj->usart->CR1 &= ~(USART_CR1_TXEIE);
 }
 
 static void EnableTcInterrupt(Uart_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     obj->usart->CR1 |= (USART_CR1_TCIE);
 }
 
 static void DisableTcInterrupt(Uart_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     obj->usart->CR1 &= ~(USART_CR1_TCIE);
 }
 
 static void UartStart(Uart_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     uint8_t item = 0;
 
@@ -232,7 +234,7 @@ static void UartStart(Uart_t* const obj)
 
 static IRQn_Type GetIrqType(const Uart_t* const obj)
 {
-    assert(obj != NULL);
+    ASSERT(obj != NULL);
 
     IRQn_Type result;
 
@@ -247,7 +249,7 @@ static IRQn_Type GetIrqType(const Uart_t* const obj)
             break;
 
         default:
-            assert(0);
+            ASSERT(false);
             break;
     }
 
@@ -287,6 +289,8 @@ static void UartOnInterrupt(Uart_t* const obj)
 
 bool UartIdle(Uart_t* const obj)
 {
+    ASSERT(obj != NULL);
+
     return obj->isTransmitCompeted;
 }
 
