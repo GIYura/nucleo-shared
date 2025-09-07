@@ -15,22 +15,22 @@ typedef enum
 } LOG_LEVEL;
 
 /*Brief: Logger initialization
- * [in] - level - logger level
+ * [in] - none
  * [out] - none
  * */
-void LogInit(LOG_LEVEL level);
+void LogInit(void);
+
+/*Brief: Set logger level
+ * [in] - level - new level
+ * [out] - none
+ * */
+void LogLevel(LOG_LEVEL level);
 
 /*Brief: Send message
  * [in] - fmt - supported formats: %u %d %x %s %c
  * [out] - none
  * */
 void LogPrint(const char *fmt, ...);
-
-/*Brief: Wait until logger is Idle
- * [in] - none
- * [out] - none
- * */
-void LogFlush(void);
 
 /*Brief: Check if logger is Idle
  * [in] - none

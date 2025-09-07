@@ -5,9 +5,8 @@
 #include "logger.h"
 #include "uart.h"
 
-static Uart_t m_uart;
+static UartHandle_t m_uart;
 static LOG_LEVEL m_logLevel = LOG_LEVEL_DEBUG;
-static bool m_isIdle = false;
 
 const char* const NEW_LINE = "\r\n";
 static const char* const PREFIXES[] = { "[DBG]: ", "[INFO]:", "[WARN]: ", "[ERR]: " };
@@ -85,11 +84,14 @@ static void PrintNewLine(void)
     UartWrite(&m_uart, (uint8_t*)NEW_LINE, len);
 }
 
-void LogInit(LOG_LEVEL level)
+void LogInit(void)
+{
+    UartInit(&m_uart, UART_1, BAUD_921600);
+}
+
+void LogLevel(LOG_LEVEL level)
 {
     ASSERT(level < LOG_LEVEL_NUMBER);
-
-    UartInit(&m_uart, UART_1, BAUD_921600);
 
     m_logLevel = level;
 }
@@ -167,15 +169,7 @@ void LogPrint(const char *fmt, ...)
     va_end(args);
 }
 
-void LogFlush(void)
-{
-    while (!UartIdle(&m_uart));
-
-    m_isIdle = true;
-}
-
 bool LogIdle(void)
 {
-    return m_isIdle;
+    return UartIdle(&m_uart);
 }
-
