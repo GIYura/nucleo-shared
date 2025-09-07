@@ -7,6 +7,7 @@
 #include "stm32f411xe.h"
 
 #include "buffer.h"
+#include "gpio.h"
 
 #define TX_BUFFER_SIZE      1023
 
@@ -34,39 +35,43 @@ typedef enum
 typedef enum
 {
     UART_1 = 0,
+    UART_2,
     UART_6,
     UART_COUNT
 } UART_NAMES;
 
 typedef struct
 {
-    USART_TypeDef* usart;
+    USART_TypeDef* instance;
     UART_NAMES uartName;
+    Gpio_t GpioTx;
+    Gpio_t GpioRx;
     Buffer_t txBuffer;
     uint8_t txData[TX_BUFFER_SIZE + 1];
     volatile bool isTransmitting;
     volatile bool isTransmitCompeted;
-} Uart_t;
+    bool initialized;
+} UartHandle_t;
 
 /*Brief: UART initialization
- * [in] - obj - pointer to UART object
+ * [in] - obj - pointer to UART handle
  * [in] - baud - baud rate
  * [out] - none
  * */
-void UartInit(Uart_t* const obj, UART_NAMES uartName, BAUD_RATE baud);
+void UartInit(UartHandle_t* const obj, UART_NAMES uartName, BAUD_RATE baud);
 
 /*Brief: Send message over UART
- * [in] - obj - pointer to UART object
+ * [in] - obj - pointer to UART handle
  * [in] - buff - pointer to buffer
  * [in] - size - buffer size
  * [out] - none
  * */
-void UartWrite(Uart_t* const obj, uint8_t* buffer, uint8_t size);
+void UartWrite(UartHandle_t* const obj, uint8_t* buffer, uint8_t size);
 
 /*Brief: Check if UART is in Idle state
- * [in] - obj - pointer to UART object
- * [out] - true - idle (free); fale - otherwise (busy)
+ * [in] - obj - pointer to UART handle
+ * [out] - true - idle (free); false - otherwise (busy)
  * */
-bool UartIdle(Uart_t* const obj);
+bool UartIdle(UartHandle_t* const obj);
 
 #endif /* UART_H */
