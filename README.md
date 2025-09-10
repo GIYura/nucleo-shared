@@ -16,6 +16,7 @@ Contains SW modules shared accross projects.
 | mpu             | Memory Protection Unit      |                              |
 | pwm             | PWM driver                  | TIM1 (refactor)              |
 | spi             | SPI driver                  |                              |
+| i2c             | I2C driver                  |                              |
 | uart            | UART driver                 |                              |
 | adxl345         | ADXL345 driver              |                              |
 | utils           | Helper macros               |                              |
