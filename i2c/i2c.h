@@ -43,7 +43,7 @@ typedef struct
     bool initialized;
 } I2C_Handle_t;
 
-void I2C_Init(I2C_Handle_t* const obj, I2C_NAMES name, I2C_Config_t* config);
+void I2C_Init(I2C_Handle_t* const obj, I2C_NAMES name/*, I2C_Config_t* config*/);
 void I2C_Deinit(I2C_Handle_t* const obj);
 
 void I2C_Start(I2C_Handle_t* const obj);
@@ -55,5 +55,8 @@ uint8_t I2C_ReadDataNACK(I2C_Handle_t* const obj);
 
 void I2C_ReadAsync(I2C_Handle_t* const obj, uint8_t devAddr, uint8_t* data, uint8_t size);
 void I2C_WriteAsync(I2C_Handle_t* const obj, uint8_t devAddr, uint8_t* data, uint8_t size);
+
+void I2C_MasterTransmit(I2C_Handle_t* const obj, const uint8_t* txBuffer, uint8_t len, uint8_t slaveAddr);
+void I2C_MasterReceive(I2C_Handle_t* const obj, uint8_t* rxBuffer, uint8_t len, uint8_t slaveAddr);
 
 #endif /* I2C_H */
