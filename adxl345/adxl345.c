@@ -5,6 +5,10 @@
 #include "adxl345-regs.h"
 #include "spi.h"
 
+#if 1
+#include "i2c.h"
+#endif
+
 #define SPI_CLOCK_RATE  5000000     /* Hz */
 
 typedef struct
@@ -32,6 +36,10 @@ typedef struct
 static AdxlRegisterRequest_t m_adxlRegisterRequest;
 static AdxlVectorRequest_t m_adxlVectorRequest;
 static Adxl345_t m_adxl345;
+
+#if 1
+static I2C_Handle_t m_i2c;
+#endif
 
 static void Adxl345_Activate(void* context)
 {
@@ -163,3 +171,71 @@ void ADXL_ReadVectorAsync(uint8_t address, ADXL_RequestHandler_t callback, void*
 
     SpiTransfer_IT(&m_adxl345.spi, &spiTransaction);
 }
+
+bool ADXL_SelfTestOverI2C(void)
+{
+    uint8_t adxlIdOut = 0;
+    uint8_t adxlThresTapIn = 0xAA;
+    uint8_t adxlThresTapOut = 0;
+    uint8_t adxlPowerControlIn = 0x08;
+    uint8_t adxlPowerControlOut = 0;
+    uint8_t adxlIdAddress = ADXL345_DEVID;
+    uint8_t adxlThresTapAddress = ADXL345_THRESH_TAP;
+    uint8_t adxlDataX0Address = ADXL345_DATAX0;
+    uint8_t adxlPowerControlAddress = ADXL345_POWER_CTL;
+    uint8_t adxlBuff[2] = { 0 };
+    uint8_t adxlVector[6] = { 0 };
+
+    Acceleration_t acceleration = { .x = 0, .y = 0, .z = 0 };
+
+    I2C_Init(&m_i2c, I2C_1);
+
+    /* read adxl345 ID */
+    I2C_MasterTransmit(&m_i2c, &adxlIdAddress, 1, 0x53);
+    I2C_MasterReceive(&m_i2c, &adxlIdOut, 1, 0x53);
+
+    if (adxlIdOut != 0xE5)
+    {
+        return false;
+    }
+
+    /* write to adxl345 THRES_TAP reg value 0xAA */
+    adxlBuff[0] = adxlThresTapAddress;
+    adxlBuff[1] = adxlThresTapIn;
+    I2C_MasterTransmit(&m_i2c, adxlBuff, 2, 0x53);
+
+    /* read from adxl345 THRES_TAP reg value 0xAA */
+    I2C_MasterReceive(&m_i2c, &adxlThresTapOut, 1, 0x53);
+
+    if (adxlThresTapIn != adxlThresTapOut)
+    {
+        return false;
+    }
+
+    /* enable measurement */
+    adxlBuff[0] = adxlPowerControlAddress;
+    adxlBuff[1] = adxlPowerControlIn;
+    I2C_MasterTransmit(&m_i2c, adxlBuff, 2, 0x53);
+    I2C_MasterReceive(&m_i2c, &adxlPowerControlOut, 1, 0x53);
+
+    if (adxlPowerControlIn != adxlPowerControlOut)
+    {
+        return false;
+    }
+
+    /* read vector */
+    I2C_MasterTransmit(&m_i2c, &adxlDataX0Address, 1, 0x53);
+    I2C_MasterReceive(&m_i2c, adxlVector, 6, 0x53);
+
+    acceleration.x = (int16_t)(adxlVector[1] << 8 | adxlVector[0]);
+    acceleration.y = (int16_t)(adxlVector[3] << 8 | adxlVector[2]);
+    acceleration.z = (int16_t)(adxlVector[5] << 8 | adxlVector[4]);
+
+    if (acceleration.x == 0 && acceleration.y == 0 && acceleration.z == 0)
+    {
+        return false;
+    }
+
+    return true;
+}
+

@@ -2,6 +2,7 @@
 #define ADXL345_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef void (*ADXL_RequestHandler_t)(void* value, void* context);
 
@@ -40,5 +41,7 @@ void ADXL_WriteRegisterAsync(uint8_t address, void* value);
  * [out] - none
  * */
 void ADXL_ReadVectorAsync(uint8_t address, ADXL_RequestHandler_t callback, void* context);
+
+bool ADXL_SelfTestOverI2C(void);
 
 #endif /* ADXL345_H */
