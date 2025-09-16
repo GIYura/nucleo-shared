@@ -315,7 +315,7 @@ uint8_t I2C_ReadDataNACK(I2C_Handle_t* const obj)
 
     return obj->instance->DR;
 }
-
+#if 0
 void I2C_ReadAsync(I2C_Handle_t* const obj, uint8_t devAddr, uint8_t* data, uint8_t size)
 {
     ASSERT(obj);
@@ -343,6 +343,7 @@ void I2C_WriteAsync(I2C_Handle_t* const obj, uint8_t devAddr, uint8_t* data, uin
 
     obj->instance->CR1 |= (I2C_CR1_START);
 }
+#endif
 
 void I2C1_EV_IRQHandler(void)
 {
@@ -399,35 +400,40 @@ void I2C_MasterTransmit(I2C_Handle_t* const obj, const uint8_t* txBuffer, uint8_
     ASSERT(obj);
     ASSERT(txBuffer != NULL);
     ASSERT(obj->initialized);
+    ASSERT(len > 0);
 
-    /* 1. start condition */
+    /* 1. wait until bus is idle */
+    while ((obj->instance->SR2 & I2C_SR2_BUSY));
+
+    /* 2. start condition */
     obj->instance->CR1 |= (I2C_CR1_START);
 
-    /* 2. wait for SB flag. Read SR1 register */
+    /* 3. wait for SB flag. Read SR1 register */
     while (!(obj->instance->SR1 & I2C_SR1_SB));
 
-    /* 3. address phase (send slave address) read/write bit = 0 */
+    /* 4. address phase (send slave address) read/write bit = 0 */
     slaveAddr = slaveAddr << 1;
     slaveAddr &= ~(1 << 0);
     obj->instance->DR = slaveAddr;
 
-    /*NOTE: steps 2 and 3 clear SB flag */
-
-    /* 4. confirm address phase completed, clear ADDR flag */
+    /* 5. confirm address phase completed, clear ADDR flag */
     while (!(obj->instance->SR1 & I2C_SR1_ADDR));
     IGNORE(obj->instance->SR2);
 
-    /* 5.send data */
+    /* 6. send data */
     while (len > 0)
     {
-        obj->instance->DR = *txBuffer;
-        txBuffer++;
+        while (!(obj->instance->SR1 & I2C_SR1_TXE));
+        obj->instance->DR = *txBuffer++;
         len--;
 
-        while (!(obj->instance->SR1 & I2C_SR1_TXE));
+        if ((len > 0) && (obj->instance->SR1 & I2C_SR1_BTF))
+        {
+            obj->instance->DR = *txBuffer++;
+            len--;
+        }
     }
 
-    /* 6. close transfer, wait until Byte Transfer Finished */
     while (!(obj->instance->SR1 & I2C_SR1_BTF));
 
     /* 7. stop condition */
@@ -438,32 +444,47 @@ void I2C_MasterReceive(I2C_Handle_t* const obj, uint8_t* rxBuffer, uint8_t len, 
 {
     ASSERT(obj);
     ASSERT(rxBuffer != NULL);
-    ASSERT(len != 0);
+    ASSERT(obj->initialized);
 
-    /* 1. start condition */
+    /* 1. wait until bus is idle */
+    while ((obj->instance->SR2 & I2C_SR2_BUSY));
+
+    /* 2. start condition */
     obj->instance->CR1 |= (I2C_CR1_START);
 
-    /* 2. wait for SB flag. Read SR1 register */
+    /* 3. wait for SB flag. Read SR1 register */
     while (!(obj->instance->SR1 & I2C_SR1_SB));
 
-    /* 3. address phase (send slave address) read/write bit = 1 */
+    /* 4. address phase (send slave address) read/write bit = 1 */
     slaveAddr = slaveAddr << 1;
     slaveAddr |= (1 << 0);
     obj->instance->DR = slaveAddr;
 
-    /* 4. confirm address phase completed */
+    /* 5. confirm address phase completed */
     while (!(obj->instance->SR1 & I2C_SR1_ADDR));
 
-    if (len == 1)
+    /* case 0: nothing to receive */
+    if (len == 0)
     {
-        /* disable ACK */
-        obj->instance->CR1 &= ~I2C_CR1_ACK;
-
-        __disable_irq();
-        /* clear ADDR flag by reading SR2 */
+        /* clear ADDR flag by reading SR1->SR2 */
+        IGNORE(obj->instance->SR1);
         IGNORE(obj->instance->SR2);
 
         /* stop condition */
+        obj->instance->CR1 |= (I2C_CR1_STOP);
+
+    }
+    /* case 1: single byte to receive */
+    else if (len == 1)
+    {
+        /* clear ACK */
+        obj->instance->CR1 &= ~I2C_CR1_ACK;
+
+        __disable_irq();
+        /* clear ADDR flag by reading SR1->SR2 */
+        IGNORE(obj->instance->SR1);
+        IGNORE(obj->instance->SR2);
+        /* set stop condition */
         obj->instance->CR1 |= (I2C_CR1_STOP);
         __enable_irq();
 
@@ -471,30 +492,45 @@ void I2C_MasterReceive(I2C_Handle_t* const obj, uint8_t* rxBuffer, uint8_t len, 
         while (!(obj->instance->SR1 & I2C_SR1_RXNE));
 
         /* read data */
-        *rxBuffer = obj->instance->DR;
+        *rxBuffer++ = obj->instance->DR;
+        len--;
     }
+    /* case 2: two bytes to receive */
     else if (len == 2)
     {
-        obj->instance->CR1 |= I2C_CR1_POS;
-        obj->instance->CR1 |= I2C_CR1_ACK;
-
-        __disable_irq();
-        IGNORE(obj->instance->SR2);
+        /* clear ACK */
         obj->instance->CR1 &= ~I2C_CR1_ACK;
 
+        /* set POS */
+        obj->instance->CR1 |= I2C_CR1_POS;
+
+        /* clear ADDR flag by reading SR1->SR2 */
+        __disable_irq();
+        IGNORE(obj->instance->SR1);
+        IGNORE(obj->instance->SR2);
+        __enable_irq();
+
         while (!(obj->instance->SR1 & I2C_SR1_BTF));
+
+        __disable_irq();
         obj->instance->CR1 |= (I2C_CR1_STOP);
         __enable_irq();
 
-        rxBuffer[0] = obj->instance->DR;
-        rxBuffer[1] = obj->instance->DR;
+        *rxBuffer++ = obj->instance->DR;
+        len--;
+        *rxBuffer++ = obj->instance->DR;
+        len--;
 
         obj->instance->CR1 &= ~I2C_CR1_POS;
     }
+    /* case 3: receive > 2 bytes */
     else
     {
-        /*clear ADDR flag */
+        /* set ACK */
         obj->instance->CR1 |= I2C_CR1_ACK;
+
+        /* clear ADDR flag by reading SR1->SR2 */
+        IGNORE(obj->instance->SR1);
         IGNORE(obj->instance->SR2);
 
         while (len > 3)
@@ -504,22 +540,112 @@ void I2C_MasterReceive(I2C_Handle_t* const obj, uint8_t* rxBuffer, uint8_t len, 
             len--;
         }
 
+        /* 3 bytes left to receive */
         while (!(obj->instance->SR1 & I2C_SR1_BTF));
 
+        __disable_irq();
+        /* clear ACK */
         obj->instance->CR1 &= ~I2C_CR1_ACK;
 
-        __disable_irq();
         *rxBuffer++ = obj->instance->DR;
-        obj->instance->CR1 |= (I2C_CR1_STOP);
+        len--;
         __enable_irq();
 
-        while (!(obj->instance->SR1 & I2C_SR1_RXNE));
-        *rxBuffer++ = obj->instance->DR;
+        while (!(obj->instance->SR1 & I2C_SR1_BTF));
 
-        while (!(obj->instance->SR1 & I2C_SR1_RXNE));
+        __disable_irq();
+        obj->instance->CR1 |= I2C_CR1_STOP;
+        __enable_irq();
+
         *rxBuffer++ = obj->instance->DR;
+        len--;
+        *rxBuffer++ = obj->instance->DR;
+        len--;
     }
 
-    /* enable ACK */
+    /* set ACK */
     obj->instance->CR1 |= I2C_CR1_ACK;
 }
+
+void I2C_Recovery(I2C_Handle_t* const obj)
+{
+    ASSERT(obj);
+    ASSERT(obj->initialized);
+
+    /*TODO:*/
+}
+
+uint8_t I2C_MasterTransmit_IT(I2C_Handle_t* const obj, uint8_t* txBuffer, uint8_t len, uint8_t slaveAddr, uint8_t reapeatStart)
+{
+    ASSERT(obj);
+    ASSERT(txBuffer != NULL);
+    ASSERT(obj->initialized);
+    ASSERT(len > 0);
+
+    uint8_t state = obj->TxRxState;
+
+    if (state != I2C_BUSY_TX && state != I2C_BUSY_RX)
+    {
+        obj->txBuffer = txBuffer;
+        obj->txLen = len;
+        obj->TxRxState = I2C_BUSY_TX;
+
+        slaveAddr = slaveAddr << 1;
+        slaveAddr &= ~(1 << 0);
+        obj->instance->DR = slaveAddr;
+
+        obj->repeatStart = reapeatStart;
+    }
+
+    /* 1. start condition */
+    obj->instance->CR1 |= (I2C_CR1_START);
+
+    /* 2. enable ITBUFEN */
+    obj->instance->CR2 |= (I2C_CR2_ITBUFEN);
+
+    /* 3. enable ITEVETEN */
+    obj->instance->CR2 |= (I2C_CR2_ITEVTEN);
+
+    /* 4. enable ITERREN */
+    obj->instance->CR2 |= (I2C_CR2_ITERREN);
+
+    return state;
+}
+
+uint8_t I2C_MasterReceive_IT(I2C_Handle_t* const obj, uint8_t* rxBuffer, uint8_t len, uint8_t slaveAddr, uint8_t reapeatStart)
+{
+    ASSERT(obj);
+    ASSERT(rxBuffer != NULL);
+    ASSERT(obj->initialized);
+
+    uint8_t state = obj->TxRxState;
+
+    if( (state != I2C_BUSY_TX) && (state != I2C_BUSY_RX))
+    {
+        obj->rxBuffer = rxBuffer;
+        obj->rxLen = len;
+        obj->TxRxState = I2C_BUSY_RX;
+        obj->RxSize = len;
+
+        slaveAddr = slaveAddr << 1;
+        slaveAddr |= (1 << 0);
+        obj->instance->DR = slaveAddr;
+
+        obj->repeatStart = reapeatStart;
+
+        /* 1. start condition */
+        obj->instance->CR1 |= (I2C_CR1_START);
+
+        /* 2. enable ITBUFEN */
+        obj->instance->CR2 |= (I2C_CR2_ITBUFEN);
+
+        /* 3. enable ITEVETEN */
+        obj->instance->CR2 |= (I2C_CR2_ITEVTEN);
+
+        /* 4. enable ITERREN */
+        obj->instance->CR2 |= (I2C_CR2_ITERREN);
+    }
+
+    return state;
+}
+

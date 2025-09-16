@@ -38,8 +38,9 @@ typedef struct
     uint8_t* rxBuffer;
     uint32_t txLen;
     uint32_t rxLen;
-    uint8_t txState;
-    uint8_t rxState;
+    uint8_t TxRxState;
+    uint32_t RxSize;
+    uint8_t repeatStart;
     bool initialized;
 } I2C_Handle_t;
 
@@ -52,11 +53,16 @@ void I2C_WriteAddress(I2C_Handle_t* const obj, uint8_t address);
 void I2C_WriteData(I2C_Handle_t* const obj, uint8_t data);
 void I2C_WaitTrasfetFinished(I2C_Handle_t* const obj);
 uint8_t I2C_ReadDataNACK(I2C_Handle_t* const obj);
-
+#if 0
 void I2C_ReadAsync(I2C_Handle_t* const obj, uint8_t devAddr, uint8_t* data, uint8_t size);
 void I2C_WriteAsync(I2C_Handle_t* const obj, uint8_t devAddr, uint8_t* data, uint8_t size);
+#endif
 
 void I2C_MasterTransmit(I2C_Handle_t* const obj, const uint8_t* txBuffer, uint8_t len, uint8_t slaveAddr);
 void I2C_MasterReceive(I2C_Handle_t* const obj, uint8_t* rxBuffer, uint8_t len, uint8_t slaveAddr);
+void I2C_Recovery(I2C_Handle_t* const obj);
+
+uint8_t I2C_MasterTransmit_IT(I2C_Handle_t* const obj, uint8_t* txBuffer, uint8_t len, uint8_t slaveAddr, uint8_t reapeatStart);
+uint8_t I2C_MasterReceive_IT(I2C_Handle_t* const obj, uint8_t* rxBuffer, uint8_t len, uint8_t slaveAddr, uint8_t reapeatStart);
 
 #endif /* I2C_H */
