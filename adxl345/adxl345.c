@@ -7,6 +7,8 @@
 
 #if 1
 #include "i2c.h"
+#define ADXL345_I2C_ADDRESS 0x53
+#define ADXL345_ID          0xE5
 #endif
 
 #define SPI_CLOCK_RATE  5000000     /* Hz */
@@ -191,10 +193,10 @@ bool ADXL_SelfTestOverI2C(void)
     I2C_Init(&m_i2c, I2C_1);
 
     /* read adxl345 ID */
-    I2C_MasterTransmit(&m_i2c, &adxlIdAddress, 1, 0x53);
-    I2C_MasterReceive(&m_i2c, &adxlIdOut, 1, 0x53);
+    I2C_MasterTransmit(&m_i2c, &adxlIdAddress, sizeof(adxlIdAddress), ADXL345_I2C_ADDRESS);
+    I2C_MasterReceive(&m_i2c, &adxlIdOut, sizeof(adxlIdOut), ADXL345_I2C_ADDRESS);
 
-    if (adxlIdOut != 0xE5)
+    if (adxlIdOut != ADXL345_ID)
     {
         return false;
     }
@@ -202,10 +204,10 @@ bool ADXL_SelfTestOverI2C(void)
     /* write to adxl345 THRES_TAP reg value 0xAA */
     adxlBuff[0] = adxlThresTapAddress;
     adxlBuff[1] = adxlThresTapIn;
-    I2C_MasterTransmit(&m_i2c, adxlBuff, 2, 0x53);
+    I2C_MasterTransmit(&m_i2c, adxlBuff, sizeof(adxlBuff), ADXL345_I2C_ADDRESS);
 
     /* read from adxl345 THRES_TAP reg value 0xAA */
-    I2C_MasterReceive(&m_i2c, &adxlThresTapOut, 1, 0x53);
+    I2C_MasterReceive(&m_i2c, &adxlThresTapOut, sizeof(adxlThresTapOut), ADXL345_I2C_ADDRESS);
 
     if (adxlThresTapIn != adxlThresTapOut)
     {
@@ -215,8 +217,8 @@ bool ADXL_SelfTestOverI2C(void)
     /* enable measurement */
     adxlBuff[0] = adxlPowerControlAddress;
     adxlBuff[1] = adxlPowerControlIn;
-    I2C_MasterTransmit(&m_i2c, adxlBuff, 2, 0x53);
-    I2C_MasterReceive(&m_i2c, &adxlPowerControlOut, 1, 0x53);
+    I2C_MasterTransmit(&m_i2c, adxlBuff, sizeof(adxlBuff), ADXL345_I2C_ADDRESS);
+    I2C_MasterReceive(&m_i2c, &adxlPowerControlOut, sizeof(adxlPowerControlOut), ADXL345_I2C_ADDRESS);
 
     if (adxlPowerControlIn != adxlPowerControlOut)
     {
@@ -224,8 +226,8 @@ bool ADXL_SelfTestOverI2C(void)
     }
 
     /* read vector */
-    I2C_MasterTransmit(&m_i2c, &adxlDataX0Address, 1, 0x53);
-    I2C_MasterReceive(&m_i2c, adxlVector, 6, 0x53);
+    I2C_MasterTransmit(&m_i2c, &adxlDataX0Address, sizeof(adxlDataX0Address), ADXL345_I2C_ADDRESS);
+    I2C_MasterReceive(&m_i2c, adxlVector, sizeof(adxlVector), ADXL345_I2C_ADDRESS);
 
     acceleration.x = (int16_t)(adxlVector[1] << 8 | adxlVector[0]);
     acceleration.y = (int16_t)(adxlVector[3] << 8 | adxlVector[2]);
@@ -238,4 +240,3 @@ bool ADXL_SelfTestOverI2C(void)
 
     return true;
 }
-
