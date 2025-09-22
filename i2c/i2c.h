@@ -27,42 +27,91 @@ typedef enum
     I2C_BUSY_RX
 } I2C_STATE;
 
+typedef void (*I2C_EventHandler_t)(void* context);
+
 typedef struct
 {
-    I2C_TypeDef* instance;
-    I2C_NAMES name;
-    Gpio_t sda;
-    Gpio_t scl;
     uint8_t devAddress;
     uint8_t* txBuffer;
     uint8_t* rxBuffer;
     uint32_t txLen;
     uint32_t rxLen;
     uint8_t TxRxState;
-    uint32_t RxSize;
+
+    I2C_EventHandler_t onTxDone;
+    I2C_EventHandler_t onRxDone;
+
+} I2C_Transaction_t;
+
+typedef struct
+{
+    I2C_TypeDef* instance;
+    I2C_NAMES name;
+    Gpio_t sda;
+    Gpio_t scl;
+#if 0
+    uint8_t devAddress;
+    uint8_t* txBuffer;
+    uint8_t* rxBuffer;
+    uint32_t txLen;
+    uint32_t rxLen;
+    uint8_t TxRxState;
+    uint32_t rxSize;
     uint8_t repeatStart;
+#endif
+    I2C_Transaction_t* transaction;
     bool initialized;
 } I2C_Handle_t;
 
+/*Brief: I2C initialization
+ * [in] - obj - pointer to I2C object
+ * [in] - name - I2C name
+ * [out] - none
+ * */
 void I2C_Init(I2C_Handle_t* const obj, I2C_NAMES name/*, I2C_Config_t* config*/);
+
+/*Brief: I2C de-initialization
+ * [in] - obj - pointer to I2C object
+ * [out] - none
+ * */
 void I2C_Deinit(I2C_Handle_t* const obj);
 
-void I2C_Start(I2C_Handle_t* const obj);
-void I2C_Stop(I2C_Handle_t* const obj);
-void I2C_WriteAddress(I2C_Handle_t* const obj, uint8_t address);
-void I2C_WriteData(I2C_Handle_t* const obj, uint8_t data);
-void I2C_WaitTrasfetFinished(I2C_Handle_t* const obj);
-uint8_t I2C_ReadDataNACK(I2C_Handle_t* const obj);
-#if 0
-void I2C_ReadAsync(I2C_Handle_t* const obj, uint8_t devAddr, uint8_t* data, uint8_t size);
-void I2C_WriteAsync(I2C_Handle_t* const obj, uint8_t devAddr, uint8_t* data, uint8_t size);
-#endif
+/*Brief: I2C transmit in blocking mode
+ * [in] - obj - pointer to I2C object
+ * [in] - txBuffer - buffer to transmit
+ * [in] - size - buffer size
+ * [in] - slaveAddr - address of the slave device
+ * [out] - none
+ * */
+void I2C_MasterTransmit(I2C_Handle_t* const obj, const uint8_t* txBuffer, uint8_t size, uint8_t slaveAddr);
 
-void I2C_MasterTransmit(I2C_Handle_t* const obj, const uint8_t* txBuffer, uint8_t len, uint8_t slaveAddr);
-void I2C_MasterReceive(I2C_Handle_t* const obj, uint8_t* rxBuffer, uint8_t len, uint8_t slaveAddr);
+/*Brief: I2C receive in blocking mode
+ * [in] - obj - pointer to I2C object
+ * [in] - rxBuffer - buffer to receive
+ * [in] - size - buffer size
+ * [in] - slaveAddr - address of the slave device
+ * [out] - none
+ * */
+void I2C_MasterReceive(I2C_Handle_t* const obj, uint8_t* rxBuffer, uint8_t size, uint8_t slaveAddr);
+
+/*Brief: I2C bus recover
+ * [in] - obj - pointer to I2C object
+ * [out] - none
+ * */
 void I2C_Recovery(I2C_Handle_t* const obj);
 
-uint8_t I2C_MasterTransmit_IT(I2C_Handle_t* const obj, uint8_t* txBuffer, uint8_t len, uint8_t slaveAddr, uint8_t reapeatStart);
-uint8_t I2C_MasterReceive_IT(I2C_Handle_t* const obj, uint8_t* rxBuffer, uint8_t len, uint8_t slaveAddr, uint8_t reapeatStart);
+/*Brief: I2C transmit in non-blocking mode
+ * [in] - obj - pointer to I2C object
+ * [in] - transaction - pointer to transaction
+ * [out] - I2C state
+ * */
+uint8_t I2C_MasterTransmit_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transaction);
+
+/*Brief: I2C receive in non-blocking mode
+ * [in] - obj - pointer to I2C object
+ * [in] - transaction - pointer to transaction
+ * [out] - I2C state
+ * */
+uint8_t I2C_MasterReceive_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transaction);
 
 #endif /* I2C_H */
