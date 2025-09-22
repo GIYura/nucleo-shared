@@ -193,8 +193,33 @@ bool ADXL_SelfTestOverI2C(void)
     I2C_Init(&m_i2c, I2C_1);
 
     /* read adxl345 ID */
-    I2C_MasterTransmit(&m_i2c, &adxlIdAddress, sizeof(adxlIdAddress), ADXL345_I2C_ADDRESS);
-    I2C_MasterReceive(&m_i2c, &adxlIdOut, sizeof(adxlIdOut), ADXL345_I2C_ADDRESS);
+    I2C_Transaction_t tranction;
+
+    tranction.TxRxState = I2C_IDLE;
+    tranction.devAddress = ADXL345_I2C_ADDRESS;
+    tranction.txBuffer = &adxlIdAddress;
+    tranction.txLen = sizeof(adxlIdAddress);
+    tranction.rxBuffer = NULL;
+    tranction.rxLen = 0;
+    tranction.onTxDone = NULL;
+    tranction.onRxDone = NULL;
+
+    I2C_MasterTransmit_IT(&m_i2c, &tranction);
+
+    DelayMs(1);
+
+    tranction.TxRxState = I2C_IDLE;
+    tranction.devAddress = ADXL345_I2C_ADDRESS;
+    tranction.txBuffer = NULL;
+    tranction.txLen = 0;
+    tranction.rxBuffer = &adxlIdOut;
+    tranction.rxLen = sizeof(adxlIdOut);
+    tranction.onTxDone = NULL;
+    tranction.onRxDone = NULL;
+
+    I2C_MasterReceive_IT(&m_i2c, &tranction);
+
+    DelayMs(1);
 
     if (adxlIdOut != ADXL345_ID)
     {
@@ -204,10 +229,32 @@ bool ADXL_SelfTestOverI2C(void)
     /* write to adxl345 THRES_TAP reg value 0xAA */
     adxlBuff[0] = adxlThresTapAddress;
     adxlBuff[1] = adxlThresTapIn;
-    I2C_MasterTransmit(&m_i2c, adxlBuff, sizeof(adxlBuff), ADXL345_I2C_ADDRESS);
 
-    /* read from adxl345 THRES_TAP reg value 0xAA */
-    I2C_MasterReceive(&m_i2c, &adxlThresTapOut, sizeof(adxlThresTapOut), ADXL345_I2C_ADDRESS);
+    tranction.TxRxState = I2C_IDLE;
+    tranction.devAddress = ADXL345_I2C_ADDRESS;
+    tranction.txBuffer = adxlBuff;
+    tranction.txLen = sizeof(adxlBuff);
+    tranction.rxBuffer = NULL;
+    tranction.rxLen = 0;
+    tranction.onTxDone = NULL;
+    tranction.onRxDone = NULL;
+
+    I2C_MasterTransmit_IT(&m_i2c, &tranction);
+
+    DelayMs(1);
+
+    tranction.TxRxState = I2C_IDLE;
+    tranction.devAddress = ADXL345_I2C_ADDRESS;
+    tranction.txBuffer = NULL;
+    tranction.txLen = 0;
+    tranction.rxBuffer = &adxlThresTapOut;
+    tranction.rxLen = sizeof(adxlThresTapOut);
+    tranction.onTxDone = NULL;
+    tranction.onRxDone = NULL;
+
+    I2C_MasterReceive_IT(&m_i2c, &tranction);
+
+    DelayMs(1);
 
     if (adxlThresTapIn != adxlThresTapOut)
     {
@@ -217,17 +264,63 @@ bool ADXL_SelfTestOverI2C(void)
     /* enable measurement */
     adxlBuff[0] = adxlPowerControlAddress;
     adxlBuff[1] = adxlPowerControlIn;
-    I2C_MasterTransmit(&m_i2c, adxlBuff, sizeof(adxlBuff), ADXL345_I2C_ADDRESS);
-    I2C_MasterReceive(&m_i2c, &adxlPowerControlOut, sizeof(adxlPowerControlOut), ADXL345_I2C_ADDRESS);
+
+    tranction.TxRxState = I2C_IDLE;
+    tranction.devAddress = ADXL345_I2C_ADDRESS;
+    tranction.txBuffer = adxlBuff;
+    tranction.txLen = sizeof(adxlBuff);
+    tranction.rxBuffer = NULL;
+    tranction.rxLen = 0;
+    tranction.onTxDone = NULL;
+    tranction.onRxDone = NULL;
+
+    I2C_MasterTransmit_IT(&m_i2c, &tranction);
+
+    DelayMs(1);
+
+    tranction.TxRxState = I2C_IDLE;
+    tranction.devAddress = ADXL345_I2C_ADDRESS;
+    tranction.txBuffer = NULL;
+    tranction.txLen = 0;
+    tranction.rxBuffer = &adxlPowerControlOut;
+    tranction.rxLen = sizeof(adxlPowerControlOut);
+    tranction.onTxDone = NULL;
+    tranction.onRxDone = NULL;
+
+    I2C_MasterReceive_IT(&m_i2c, &tranction);
+
+    DelayMs(1);
 
     if (adxlPowerControlIn != adxlPowerControlOut)
     {
         return false;
     }
 
-    /* read vector */
-    I2C_MasterTransmit(&m_i2c, &adxlDataX0Address, sizeof(adxlDataX0Address), ADXL345_I2C_ADDRESS);
-    I2C_MasterReceive(&m_i2c, adxlVector, sizeof(adxlVector), ADXL345_I2C_ADDRESS);
+    tranction.TxRxState = I2C_IDLE;
+    tranction.devAddress = ADXL345_I2C_ADDRESS;
+    tranction.txBuffer = &adxlDataX0Address;
+    tranction.txLen = sizeof(adxlDataX0Address);
+    tranction.rxBuffer = NULL;
+    tranction.rxLen = 0;
+    tranction.onTxDone = NULL;
+    tranction.onRxDone = NULL;
+
+    I2C_MasterTransmit_IT(&m_i2c, &tranction);
+
+    DelayMs(1);
+
+    tranction.TxRxState = I2C_IDLE;
+    tranction.devAddress = ADXL345_I2C_ADDRESS;
+    tranction.txBuffer = NULL;
+    tranction.txLen = 0;
+    tranction.rxBuffer = adxlVector;
+    tranction.rxLen = sizeof(adxlVector);
+    tranction.onTxDone = NULL;
+    tranction.onRxDone = NULL;
+
+    I2C_MasterReceive_IT(&m_i2c, &tranction);
+
+    DelayMs(1);
 
     acceleration.x = (int16_t)(adxlVector[1] << 8 | adxlVector[0]);
     acceleration.y = (int16_t)(adxlVector[3] << 8 | adxlVector[2]);
