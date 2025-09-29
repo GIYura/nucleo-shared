@@ -342,6 +342,10 @@ void I2C_Init(I2C_Handle_t* const obj, I2C_NAMES name/*, I2C_Config_t* config*/)
 
     NVIC_EnableIRQ(GetIrqEventType(obj));
 
+    BufferCreate(&obj->queue, obj->transactions, sizeof(obj->transactions), sizeof(I2C_Transaction_t), false);
+
+    obj->currentTransaction = NULL;
+
     /* I2C enable */
     I2C_Enable(obj);
 
@@ -391,41 +395,65 @@ static void I2C_IrqErrorHandler(I2C_Handle_t* const obj)
 /* TODO: */
 }
 
+#if 0
+NOTE: refer to RM0383 18.3.3 I2C master mode
+#endif
 static void I2C_IrqEventHandler(I2C_Handle_t* const obj)
 {
     ASSERT(obj);
+
+    if (obj->currentTransaction == NULL)
+    {
+        /* get address (pointer) to the current transaction */
+        obj->currentTransaction = (I2C_Transaction_t*)BufferFront(&obj->queue);
+
+        if (obj->currentTransaction == NULL)
+        {
+            return;
+        }
+    }
+
+    I2C_Transaction_t* t = obj->currentTransaction;
 
     bool eventInterruptEnable = GetBitState(obj->instance->CR2, I2C_CR2_ITEVTEN);
     bool bufferInterruptEnable = GetBitState(obj->instance->CR2, I2C_CR2_ITBUFEN);
 
     bool eventFlag = GetBitState(obj->instance->SR1, I2C_SR1_SB);
 
+    /* handle SB flag */
     if (eventInterruptEnable && eventFlag)
     {
-        /* SB flag is set */
-        I2C_WriteAddress(obj, obj->transaction->devAddress);
+        if (t->TxRxState == I2C_BUSY_TX)
+        {
+            I2C_WriteAddress(obj, ((t->devAddress << 1) & ~(1 << 0)));
+        }
+        else
+        {
+            I2C_WriteAddress(obj, ((t->devAddress << 1) | (1 << 0)));
+        }
     }
 
     eventFlag = GetBitState(obj->instance->SR1, I2C_SR1_ADDR);
 
+    /* handle ADDR flag */
     if (eventInterruptEnable && eventFlag)
     {
-        if (obj->transaction->TxRxState == I2C_BUSY_TX)
+        if (t->TxRxState == I2C_BUSY_TX)
         {
             /* ADDR flag is set */
             I2C_ClearAddrFlag(obj);
         }
-        else if (obj->transaction->TxRxState == I2C_BUSY_RX)
+        else if (t->TxRxState == I2C_BUSY_RX)
         {
             /* master receiver: setup ACK/POS according to remaining bytes */
-            if (obj->transaction->rxLen == 0)
+            if (t->rxLen == 0)
             {
                 I2C_ClearAddrFlag(obj);
                 I2C_Stop(obj);
             }
-            else if (obj->transaction->rxLen == 1)
+            else if (t->rxLen == 1)
             {
-                /* case 1: disable ACK, clear ADDR, STOP must be set after clearing ADDR */
+                /* disable ACK, clear ADDR, STOP must be set after clearing ADDR */
                 I2C_DisableAck(obj);
 
                 /* clear ADDR */
@@ -434,7 +462,7 @@ static void I2C_IrqEventHandler(I2C_Handle_t* const obj)
                 /* generate STOP as RM suggests for 1 byte */
                 I2C_Stop(obj);
             }
-            else if (obj->transaction->rxLen == 2)
+            else if (t->rxLen == 2)
             {
                 I2C_DisableAck(obj);
 
@@ -446,7 +474,7 @@ static void I2C_IrqEventHandler(I2C_Handle_t* const obj)
             }
             else
             {
-                /* N > 2 */
+                /* number of bytes > 2 */
                 I2C_EnableAck(obj);
                 I2C_ClearAddrFlag(obj);
                 /* will read by RXNE until only 3 remain, then handle via BTF */
@@ -456,56 +484,72 @@ static void I2C_IrqEventHandler(I2C_Handle_t* const obj)
 
     eventFlag = GetBitState(obj->instance->SR1, I2C_SR1_BTF);
 
+    /* handle BTF flag */
     if (eventInterruptEnable && eventFlag)
     {
-        if (obj->transaction->TxRxState == I2C_BUSY_TX)
+        if (t->TxRxState == I2C_BUSY_TX)
         {
-            if (obj->transaction->txLen == 0)
+            if (t->txLen == 0)
             {
                 __disable_irq();
                 I2C_Stop(obj);
                 __enable_irq();
 
-                obj->transaction->TxRxState = I2C_IDLE;
-#if 0
-                if (hi->XferCpltCallback)
+                /* TX transaction finished
+                 * - set state IDLE
+                 * - clear current transaction
+                 * - extract current transaction from the transaction queue
+                 * - disable interrupts
+                 * - invoke callback on transaction done */
+                t->TxRxState = I2C_IDLE;
+                obj->currentTransaction = NULL;
+                I2C_DisableEventInterrupt(obj);
+                I2C_DisableErrorInterrupt(obj);
+                I2C_DisableBufferInterrupt(obj);
+                I2C_Transaction_t transaction;
+                BufferGet(&obj->queue, &transaction, sizeof(I2C_Transaction_t));
+                if (t->onTxDone != NULL)
                 {
-                    hi->XferCpltCallback(hi);
+                    (*t->onTxDone)(t->context);
                 }
-#endif
             }
-            else
+            /*TODO: else
             {
 
-            }
+            }*/
         }
-        else if (obj->transaction->TxRxState == I2C_BUSY_RX)
+        else if (t->TxRxState == I2C_BUSY_RX)
         {
-            if (obj->transaction->rxLen == 3)
+            if (t->rxLen == 3)
             {
                 I2C_DisableAck(obj);
-                *obj->transaction->rxBuffer++ = (uint8_t)obj->instance->DR;
-                obj->transaction->rxLen--;
+
+                *t->rxBuffer++ = (uint8_t)obj->instance->DR;
+                t->rxLen--;
             }
-            else if (obj->transaction->rxLen == 2)
+            else if (t->rxLen == 2)
             {
                 __disable_irq();
                 I2C_Stop(obj);
 
-                *obj->transaction->rxBuffer++ = (uint8_t)obj->instance->DR;
-                obj->transaction->rxLen--;
-                *obj->transaction->rxBuffer++ = (uint8_t)obj->instance->DR;
-                obj->transaction->rxLen--;
+                *t->rxBuffer++ = (uint8_t)obj->instance->DR;
+                t->rxLen--;
+                *t->rxBuffer++ = (uint8_t)obj->instance->DR;
+                t->rxLen--;
 
                 __enable_irq();
 
-                obj->transaction->TxRxState = I2C_IDLE;
-#if 0
-                if (hi->XferCpltCallback)
+                t->TxRxState = I2C_IDLE;
+                obj->currentTransaction = NULL;
+                I2C_DisableEventInterrupt(obj);
+                I2C_DisableErrorInterrupt(obj);
+                I2C_DisableBufferInterrupt(obj);
+                I2C_Transaction_t transaction;
+                BufferGet(&obj->queue, &transaction, sizeof(I2C_Transaction_t));
+                if (t->onRxDone != NULL)
                 {
-                    hi->XferCpltCallback(hi);
+                    (*t->onRxDone)(t->context);
                 }
-#endif
             }
             else
             {
@@ -530,15 +574,15 @@ static void I2C_IrqEventHandler(I2C_Handle_t* const obj)
 
     eventFlag = GetBitState(obj->instance->SR1, I2C_SR1_TXE);
 
+    /* handle TXE flag */
     if (eventInterruptEnable && bufferInterruptEnable && eventFlag)
     {
-        /* TXE flag is set */
-        if (obj->transaction->TxRxState == I2C_BUSY_TX)
+        if (t->TxRxState == I2C_BUSY_TX)
         {
-            if (obj->transaction->txLen > 0)
+            if (t->txLen > 0)
             {
-                obj->instance->DR = *obj->transaction->txBuffer++;
-                obj->transaction->txLen--;
+                obj->instance->DR = *t->txBuffer++;
+                t->txLen--;
             }
             /* else nothing to write; BTF handler will generate STOP when transfer truly finished */
         }
@@ -546,24 +590,39 @@ static void I2C_IrqEventHandler(I2C_Handle_t* const obj)
 
     eventFlag = GetBitState(obj->instance->SR1, I2C_SR1_RXNE);
 
+    /* handle RNXE flag */
     if (eventInterruptEnable && bufferInterruptEnable && eventFlag)
     {
-        if (obj->transaction->TxRxState == I2C_BUSY_RX)
+        if (t->TxRxState == I2C_BUSY_RX)
         {
             /* if > 3 bytes, rely on RXNE */
-            if (obj->transaction->rxLen > 3)
+            if (t->rxLen > 3)
             {
-                *obj->transaction->rxBuffer++ = (uint8_t)obj->instance->DR;
-                obj->transaction->rxLen--;
+                *t->rxBuffer++ = (uint8_t)obj->instance->DR;
+                t->rxLen--;
             }
-            else if (obj->transaction->rxLen == 1)
+            else if (t->rxLen == 1)
             {
-                *obj->transaction->rxBuffer++ = (uint8_t)obj->instance->DR;
-                obj->transaction->rxLen--;
-                obj->transaction->TxRxState = I2C_IDLE;
-                /*
-                 * TODO: callback, single byte received
-                 * */
+                *t->rxBuffer++ = (uint8_t)obj->instance->DR;
+                t->rxLen--;
+
+                /* RX transaction finished
+                 * - set state IDLE
+                 * - clear current transaction
+                 * - extract current transaction from the transaction queue
+                 * - disable interrupts
+                 * - invoke callback on transaction done */
+                t->TxRxState = I2C_IDLE;
+                obj->currentTransaction = NULL;
+                I2C_DisableEventInterrupt(obj);
+                I2C_DisableErrorInterrupt(obj);
+                I2C_DisableBufferInterrupt(obj);
+                I2C_Transaction_t transaction;
+                BufferGet(&obj->queue, &transaction, sizeof(I2C_Transaction_t));
+                if (t->onRxDone != NULL)
+                {
+                    (*t->onRxDone)(t->context);
+                }
             }
         }
     }
@@ -744,22 +803,23 @@ void I2C_Recovery(I2C_Handle_t* const obj)
     /*TODO:*/
 }
 
-uint8_t I2C_MasterTransmit_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transaction)
+I2C_RESULT I2C_MasterTransmit_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transaction)
 {
     ASSERT(obj != NULL);
     ASSERT(transaction != NULL);
-    ASSERT(obj->initialized);
+    //ASSERT(obj->initialized);
 
-    if (transaction->TxRxState != I2C_IDLE)
+    if (!obj->initialized)
     {
-        return transaction->TxRxState;
+        return I2C_ERROR;
     }
 
-    obj->transaction = transaction;
+    transaction->TxRxState = I2C_BUSY_TX;
 
-    obj->transaction->devAddress = (obj->transaction->devAddress << 1) & ~(1 << 0);
-
-    obj->transaction->TxRxState = I2C_BUSY_TX;
+    if (!BufferPut(&obj->queue, transaction, sizeof(I2C_Transaction_t)))
+    {
+        return I2C_QUEUE_FULL;
+    }
 
     I2C_EnableEventInterrupt(obj);
     I2C_EnableErrorInterrupt(obj);
@@ -767,25 +827,25 @@ uint8_t I2C_MasterTransmit_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transa
 
     I2C_Start(obj);
 
-    return obj->transaction->TxRxState;
+    return I2C_OK;
 }
 
-uint8_t I2C_MasterReceive_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transaction)
+I2C_RESULT I2C_MasterReceive_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transaction)
 {
     ASSERT(obj != NULL);
     ASSERT(transaction != NULL);
-    ASSERT(obj->initialized);
 
-    if (transaction->TxRxState != I2C_IDLE)
+    if (!obj->initialized)
     {
-        return transaction->TxRxState;
+        return I2C_ERROR;
     }
 
-    obj->transaction = transaction;
+    transaction->TxRxState = I2C_BUSY_RX;
 
-    obj->transaction->devAddress = (obj->transaction->devAddress << 1) | (1 << 0);
-
-    obj->transaction->TxRxState = I2C_BUSY_RX;
+    if (!BufferPut(&obj->queue, transaction, sizeof(I2C_Transaction_t)))
+    {
+        return I2C_QUEUE_FULL;
+    }
 
     I2C_EnableEventInterrupt(obj);
     I2C_EnableErrorInterrupt(obj);
@@ -793,7 +853,7 @@ uint8_t I2C_MasterReceive_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transac
 
     I2C_Start(obj);
 
-    return obj->transaction->TxRxState;
+    return I2C_OK;
 }
 
 static void I2C_EnableEventInterrupt(const I2C_Handle_t* const obj)

@@ -6,6 +6,17 @@
 #include "stm32f411xe.h"
 
 #include "gpio.h"
+#include "buffer.h"
+
+#define I2C_TRANSACTION_QUEUE_SIZE 31
+
+typedef enum
+{
+    I2C_OK = 0,
+    I2C_BUSY,
+    I2C_QUEUE_FULL,
+    I2C_ERROR
+} I2C_RESULT;
 
 typedef enum
 {
@@ -41,6 +52,7 @@ typedef struct
     I2C_EventHandler_t onTxDone;
     I2C_EventHandler_t onRxDone;
 
+    void* context;
 } I2C_Transaction_t;
 
 typedef struct
@@ -49,6 +61,9 @@ typedef struct
     I2C_NAMES name;
     Gpio_t sda;
     Gpio_t scl;
+    Buffer_t queue;
+    I2C_Transaction_t transactions[I2C_TRANSACTION_QUEUE_SIZE + 1];
+    I2C_Transaction_t* currentTransaction;
 #if 0
     uint8_t devAddress;
     uint8_t* txBuffer;
@@ -59,7 +74,7 @@ typedef struct
     uint32_t rxSize;
     uint8_t repeatStart;
 #endif
-    I2C_Transaction_t* transaction;
+    //I2C_Transaction_t* transaction;
     bool initialized;
 } I2C_Handle_t;
 
@@ -105,13 +120,13 @@ void I2C_Recovery(I2C_Handle_t* const obj);
  * [in] - transaction - pointer to transaction
  * [out] - I2C state
  * */
-uint8_t I2C_MasterTransmit_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transaction);
+I2C_RESULT I2C_MasterTransmit_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transaction);
 
 /*Brief: I2C receive in non-blocking mode
  * [in] - obj - pointer to I2C object
  * [in] - transaction - pointer to transaction
  * [out] - I2C state
  * */
-uint8_t I2C_MasterReceive_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transaction);
+I2C_RESULT I2C_MasterReceive_IT(I2C_Handle_t* const obj, I2C_Transaction_t* transaction);
 
 #endif /* I2C_H */
