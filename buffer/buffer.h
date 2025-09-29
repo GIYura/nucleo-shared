@@ -58,4 +58,10 @@ bool BufferPut(Buffer_t* const buffer, const void* const data, uint16_t size);
  * */
 bool BufferGet(Buffer_t* const buffer, void* data, uint16_t size);
 
+/*Brief: Return generic pointer
+ * [in] - buffer - pointer to buffer object
+ * [out] - address of the head element of circular buffer; NULL - if buffer is empty
+ * */
+void* BufferFront(const Buffer_t* const buffer);
+
 #endif /* BUFFER_H */
