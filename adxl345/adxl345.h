@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define ADXL345_ID              0xE5
+
 typedef void (*ADXL_RequestHandler_t)(void* value, void* context);
 
 typedef struct
@@ -13,6 +15,9 @@ typedef struct
     int16_t z;
 } Acceleration_t;
 
+/*
+ * SPI section
+ * */
 /*Brief: ADXL345 initialization
  * [in] - none
  * [out] - none
@@ -42,6 +47,12 @@ void ADXL_WriteRegisterAsync(uint8_t address, void* value);
  * */
 void ADXL_ReadVectorAsync(uint8_t address, ADXL_RequestHandler_t callback, void* context);
 
-bool ADXL_SelfTestOverI2C(void);
+/*
+ * I2C section
+ * */
+void ADXL_InitI2C(void);
+void ADXL_ReadRegisterAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* context);
+void ADXL_WriteRegisterAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* value);
+void ADXL_ReadVectorAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* context);
 
 #endif /* ADXL345_H */

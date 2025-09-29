@@ -7,8 +7,9 @@
 
 #if 1
 #include "i2c.h"
-#define ADXL345_I2C_ADDRESS 0x53
-#define ADXL345_ID          0xE5
+#define ADXL345_I2C_ADDRESS     0x53
+#define ADXL345_VECTOR_SIZE     (6) /* bytes */
+#define ADXL345_REGISTER_SIZE   (1) /* bytes */
 #endif
 
 #define SPI_CLOCK_RATE  5000000     /* Hz */
@@ -35,11 +36,26 @@ typedef struct
     void* userContext;
 } AdxlVectorRequest_t;
 
+/*
+ * TODO:
+ * This struct should be used as common for SPI/I2C transactions
+ * (for single reg read/write and for reg dump)
+ * */
+typedef struct
+{
+    uint8_t tx[7];
+    uint8_t rx[7];
+    uint8_t rxLen;
+    ADXL_RequestHandler_t callback;
+    void* userContext;
+} AdxlRequest_t;
+
 static AdxlRegisterRequest_t m_adxlRegisterRequest;
 static AdxlVectorRequest_t m_adxlVectorRequest;
 static Adxl345_t m_adxl345;
 
 #if 1
+static AdxlRequest_t m_adxlRequest;
 static I2C_Handle_t m_i2c;
 #endif
 
@@ -68,6 +84,61 @@ static void OnRegisterRequestCompleted(void* context)
     }
 }
 
+static void I2C_OnRegisterRequestCompleted(void* context)
+{
+    AdxlRequest_t* req = (AdxlRequest_t*)context;
+
+    if (req->rxLen == ADXL345_REGISTER_SIZE)
+    {
+        if (req->callback)
+        {
+            req->callback(&req->rx[0], req->userContext);
+        }
+    }
+
+    if (req->rxLen == ADXL345_VECTOR_SIZE)
+    {
+        if (req->callback)
+        {
+            Acceleration_t acceleration;
+
+            acceleration.x = (int16_t)(req->rx[1] << 8 | req->rx[0]);
+            acceleration.y = (int16_t)(req->rx[3] << 8 | req->rx[2]);
+            acceleration.z = (int16_t)(req->rx[5] << 8 | req->rx[4]);
+
+            req->callback(&acceleration, req->userContext);
+        }
+    }
+}
+
+static void I2C_OnRegisterWriteCompleted(void* context)
+{
+    AdxlRequest_t* req = (AdxlRequest_t*)context;
+
+    if (req->rxLen == 0)
+    {
+        if (req->callback != NULL)
+        {
+            req->callback(&req->rx[0], req->userContext);
+        }
+    }
+    else
+    {
+        I2C_Transaction_t i2cTransaction = {
+            .devAddress = ADXL345_I2C_ADDRESS,
+            .txBuffer = NULL,
+            .txLen = 0,
+            .rxBuffer = req->rx,
+            .rxLen = req->rxLen,
+            .onTxDone = NULL,
+            .onRxDone = &I2C_OnRegisterRequestCompleted,
+            .context = req,
+        };
+
+        I2C_MasterReceive_IT(&m_i2c, &i2cTransaction);
+    }
+}
+
 static void OnVectorRequestCompleted(void* context)
 {
     if (context == NULL)
@@ -82,13 +153,16 @@ static void OnVectorRequestCompleted(void* context)
         Acceleration_t acceleration;
 
         acceleration.x = (int16_t)(req->rx[2] << 8 | req->rx[1]);
-        acceleration.y = (int16_t)(req->rx[4] << 8 | req->rx[3]);;
-        acceleration.z = (int16_t)(req->rx[6] << 8 | req->rx[5]);;
+        acceleration.y = (int16_t)(req->rx[4] << 8 | req->rx[3]);
+        acceleration.z = (int16_t)(req->rx[6] << 8 | req->rx[5]);
 
         req->callback(&acceleration, req->userContext);
     }
 }
 
+/*
+ * SPI section
+ * */
 void ADXL_Init(void)
 {
     SpiInit(&m_adxl345.spi, SPI_1, CPOL_1, CPHA_1, SPI_CLOCK_RATE);
@@ -130,6 +204,8 @@ void ADXL_ReadRegisterAsync(uint8_t address, ADXL_RequestHandler_t callback, voi
 
     SpiTransfer_IT(&m_adxl345.spi, &spiTransaction);
 }
+
+
 
 void ADXL_WriteRegisterAsync(uint8_t address, void* value)
 {
@@ -174,162 +250,80 @@ void ADXL_ReadVectorAsync(uint8_t address, ADXL_RequestHandler_t callback, void*
     SpiTransfer_IT(&m_adxl345.spi, &spiTransaction);
 }
 
-bool ADXL_SelfTestOverI2C(void)
+/*
+ * I2C section
+ * */
+void ADXL_InitI2C(void)
 {
-    uint8_t adxlIdOut = 0;
-    uint8_t adxlThresTapIn = 0xAA;
-    uint8_t adxlThresTapOut = 0;
-    uint8_t adxlPowerControlIn = 0x08;
-    uint8_t adxlPowerControlOut = 0;
-    uint8_t adxlIdAddress = ADXL345_DEVID;
-    uint8_t adxlThresTapAddress = ADXL345_THRESH_TAP;
-    uint8_t adxlDataX0Address = ADXL345_DATAX0;
-    uint8_t adxlPowerControlAddress = ADXL345_POWER_CTL;
-    uint8_t adxlBuff[2] = { 0 };
-    uint8_t adxlVector[6] = { 0 };
-
-    Acceleration_t acceleration = { .x = 0, .y = 0, .z = 0 };
-
     I2C_Init(&m_i2c, I2C_1);
-
-    /* read adxl345 ID */
-    I2C_Transaction_t tranction;
-
-    tranction.TxRxState = I2C_IDLE;
-    tranction.devAddress = ADXL345_I2C_ADDRESS;
-    tranction.txBuffer = &adxlIdAddress;
-    tranction.txLen = sizeof(adxlIdAddress);
-    tranction.rxBuffer = NULL;
-    tranction.rxLen = 0;
-    tranction.onTxDone = NULL;
-    tranction.onRxDone = NULL;
-
-    I2C_MasterTransmit_IT(&m_i2c, &tranction);
-
-    DelayMs(1);
-
-    tranction.TxRxState = I2C_IDLE;
-    tranction.devAddress = ADXL345_I2C_ADDRESS;
-    tranction.txBuffer = NULL;
-    tranction.txLen = 0;
-    tranction.rxBuffer = &adxlIdOut;
-    tranction.rxLen = sizeof(adxlIdOut);
-    tranction.onTxDone = NULL;
-    tranction.onRxDone = NULL;
-
-    I2C_MasterReceive_IT(&m_i2c, &tranction);
-
-    DelayMs(1);
-
-    if (adxlIdOut != ADXL345_ID)
-    {
-        return false;
-    }
-
-    /* write to adxl345 THRES_TAP reg value 0xAA */
-    adxlBuff[0] = adxlThresTapAddress;
-    adxlBuff[1] = adxlThresTapIn;
-
-    tranction.TxRxState = I2C_IDLE;
-    tranction.devAddress = ADXL345_I2C_ADDRESS;
-    tranction.txBuffer = adxlBuff;
-    tranction.txLen = sizeof(adxlBuff);
-    tranction.rxBuffer = NULL;
-    tranction.rxLen = 0;
-    tranction.onTxDone = NULL;
-    tranction.onRxDone = NULL;
-
-    I2C_MasterTransmit_IT(&m_i2c, &tranction);
-
-    DelayMs(1);
-
-    tranction.TxRxState = I2C_IDLE;
-    tranction.devAddress = ADXL345_I2C_ADDRESS;
-    tranction.txBuffer = NULL;
-    tranction.txLen = 0;
-    tranction.rxBuffer = &adxlThresTapOut;
-    tranction.rxLen = sizeof(adxlThresTapOut);
-    tranction.onTxDone = NULL;
-    tranction.onRxDone = NULL;
-
-    I2C_MasterReceive_IT(&m_i2c, &tranction);
-
-    DelayMs(1);
-
-    if (adxlThresTapIn != adxlThresTapOut)
-    {
-        return false;
-    }
-
-    /* enable measurement */
-    adxlBuff[0] = adxlPowerControlAddress;
-    adxlBuff[1] = adxlPowerControlIn;
-
-    tranction.TxRxState = I2C_IDLE;
-    tranction.devAddress = ADXL345_I2C_ADDRESS;
-    tranction.txBuffer = adxlBuff;
-    tranction.txLen = sizeof(adxlBuff);
-    tranction.rxBuffer = NULL;
-    tranction.rxLen = 0;
-    tranction.onTxDone = NULL;
-    tranction.onRxDone = NULL;
-
-    I2C_MasterTransmit_IT(&m_i2c, &tranction);
-
-    DelayMs(1);
-
-    tranction.TxRxState = I2C_IDLE;
-    tranction.devAddress = ADXL345_I2C_ADDRESS;
-    tranction.txBuffer = NULL;
-    tranction.txLen = 0;
-    tranction.rxBuffer = &adxlPowerControlOut;
-    tranction.rxLen = sizeof(adxlPowerControlOut);
-    tranction.onTxDone = NULL;
-    tranction.onRxDone = NULL;
-
-    I2C_MasterReceive_IT(&m_i2c, &tranction);
-
-    DelayMs(1);
-
-    if (adxlPowerControlIn != adxlPowerControlOut)
-    {
-        return false;
-    }
-
-    tranction.TxRxState = I2C_IDLE;
-    tranction.devAddress = ADXL345_I2C_ADDRESS;
-    tranction.txBuffer = &adxlDataX0Address;
-    tranction.txLen = sizeof(adxlDataX0Address);
-    tranction.rxBuffer = NULL;
-    tranction.rxLen = 0;
-    tranction.onTxDone = NULL;
-    tranction.onRxDone = NULL;
-
-    I2C_MasterTransmit_IT(&m_i2c, &tranction);
-
-    DelayMs(1);
-
-    tranction.TxRxState = I2C_IDLE;
-    tranction.devAddress = ADXL345_I2C_ADDRESS;
-    tranction.txBuffer = NULL;
-    tranction.txLen = 0;
-    tranction.rxBuffer = adxlVector;
-    tranction.rxLen = sizeof(adxlVector);
-    tranction.onTxDone = NULL;
-    tranction.onRxDone = NULL;
-
-    I2C_MasterReceive_IT(&m_i2c, &tranction);
-
-    DelayMs(1);
-
-    acceleration.x = (int16_t)(adxlVector[1] << 8 | adxlVector[0]);
-    acceleration.y = (int16_t)(adxlVector[3] << 8 | adxlVector[2]);
-    acceleration.z = (int16_t)(adxlVector[5] << 8 | adxlVector[4]);
-
-    if (acceleration.x == 0 && acceleration.y == 0 && acceleration.z == 0)
-    {
-        return false;
-    }
-
-    return true;
 }
+
+void ADXL_ReadRegisterAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* context)
+{
+    m_adxlRequest.callback = callback;
+    m_adxlRequest.userContext = context;
+
+    m_adxlRequest.tx[0] = address;
+    m_adxlRequest.rxLen = ADXL345_REGISTER_SIZE;
+
+    I2C_Transaction_t i2cTransaction = {
+        .devAddress = ADXL345_I2C_ADDRESS,
+        .txBuffer = &m_adxlRequest.tx[0],
+        .txLen = ADXL345_REGISTER_SIZE,
+        .rxBuffer = NULL,
+        .rxLen = 0,
+        .onTxDone = &I2C_OnRegisterWriteCompleted,
+        .onRxDone = NULL,
+        .context = &m_adxlRequest,
+    };
+
+    I2C_MasterTransmit_IT(&m_i2c, &i2cTransaction);
+}
+
+void ADXL_WriteRegisterAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* value)
+{
+    uint8_t size = 0;
+
+    m_adxlRequest.callback = callback;
+    m_adxlRequest.userContext = NULL;
+
+    m_adxlRequest.tx[size++] = address;
+    m_adxlRequest.tx[size++] = *(uint8_t*)value;
+    m_adxlRequest.rxLen = 0;
+
+    I2C_Transaction_t i2cTransaction = {
+        .devAddress = ADXL345_I2C_ADDRESS,
+        .txBuffer = m_adxlRequest.tx,
+        .txLen = size,
+        .rxBuffer = NULL,
+        .rxLen = 0,
+        .onTxDone = &I2C_OnRegisterWriteCompleted,
+        .onRxDone = NULL,
+        .context = &m_adxlRequest,
+    };
+
+    I2C_MasterTransmit_IT(&m_i2c, &i2cTransaction);
+}
+
+void ADXL_ReadVectorAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* context)
+{
+    m_adxlRequest.callback = callback;
+    m_adxlRequest.userContext = context;
+
+    m_adxlRequest.tx[0] = address;
+    m_adxlRequest.rxLen = ADXL345_VECTOR_SIZE;
+
+    I2C_Transaction_t i2cTransaction = {
+        .devAddress = ADXL345_I2C_ADDRESS,
+        .txBuffer = &m_adxlRequest.tx[0],
+        .txLen = sizeof(uint8_t),
+        .rxBuffer = NULL,
+        .rxLen = 0,
+        .onTxDone = &I2C_OnRegisterWriteCompleted,
+        .onRxDone = NULL,
+        .context = &m_adxlRequest,
+    };
+
+    I2C_MasterTransmit_IT(&m_i2c, &i2cTransaction);
+}
+
