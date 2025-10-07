@@ -20,4 +20,5 @@ Contains SW modules shared accross projects.
 | uart            | UART driver                 |                              |
 | adxl345         | ADXL345 driver              |                              |
 | utils           | Helper macros               |                              |
+| freeRTOS-kernel | FreeRTOS kernel files       | FreeRTOS kernel V11.1.0      |
 
