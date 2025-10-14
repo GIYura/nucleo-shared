@@ -26,10 +26,11 @@ typedef enum
     I2C_COUNT
 } I2C_NAMES;
 
-typedef struct
+typedef enum
 {
-
-} I2C_Config_t;
+    I2C_SPEED_STANDARD_MODE = 100000,   /* Hz */
+    I2C_SPEED_FAST_MODE = 400000,       /* Hz */
+} I2C_SPEED;
 
 typedef enum
 {
@@ -42,16 +43,21 @@ typedef void (*I2C_EventHandler_t)(void* context);
 
 typedef struct
 {
+    uint32_t speed;
+    uint8_t ackControl;
+    uint8_t dutyCycle;
+} I2C_Config_t;
+
+typedef struct
+{
     uint8_t devAddress;
     uint8_t* txBuffer;
     uint8_t* rxBuffer;
     uint32_t txLen;
     uint32_t rxLen;
     uint8_t TxRxState;
-
     I2C_EventHandler_t onTxDone;
     I2C_EventHandler_t onRxDone;
-
     void* context;
 } I2C_Transaction_t;
 
@@ -64,17 +70,7 @@ typedef struct
     Buffer_t queue;
     I2C_Transaction_t transactions[I2C_TRANSACTION_QUEUE_SIZE + 1];
     I2C_Transaction_t* currentTransaction;
-#if 0
-    uint8_t devAddress;
-    uint8_t* txBuffer;
-    uint8_t* rxBuffer;
-    uint32_t txLen;
-    uint32_t rxLen;
-    uint8_t TxRxState;
-    uint32_t rxSize;
-    uint8_t repeatStart;
-#endif
-    //I2C_Transaction_t* transaction;
+    I2C_Config_t config;
     bool initialized;
 } I2C_Handle_t;
 
@@ -83,7 +79,7 @@ typedef struct
  * [in] - name - I2C name
  * [out] - none
  * */
-void I2C_Init(I2C_Handle_t* const obj, I2C_NAMES name/*, I2C_Config_t* config*/);
+void I2C_Init(I2C_Handle_t* const obj, I2C_NAMES name);
 
 /*Brief: I2C de-initialization
  * [in] - obj - pointer to I2C object

@@ -4,12 +4,6 @@
 #include "i2c.h"
 #include "ignore.h"
 
-typedef enum
-{
-    I2C_STANDARD_MODE = 0,
-    I2C_FAST_MODE,
-} I2C_MODES;
-
 #define I2C_1_CLOCK_ENABLE (RCC->APB1ENR |= (RCC_APB1ENR_I2C1EN))
 #define I2C_2_CLOCK_ENABLE (RCC->APB1ENR |= (RCC_APB1ENR_I2C2EN))
 #define I2C_3_CLOCK_ENABLE (RCC->APB1ENR |= (RCC_APB1ENR_I2C3EN))
@@ -19,8 +13,8 @@ typedef enum
 #define I2C_3_CLOCK_DISABLE (RCC->APB1ENR &= ~(RCC_APB1ENR_I2C3EN))
 
 static I2C_Handle_t* m_I2CIrq[I2C_COUNT];
-static uint32_t AHB_PRESCALERS[8] = { 2,4,8,16,64,128,256,512 };
-static uint32_t APB1_PRESCALERS[4] = { 2,4,8,16 };
+static const uint32_t AHB_PRESCALERS[8] = { 2,4,8,16,64,128,256,512 };
+static const uint32_t APB1_PRESCALERS[4] = { 2,4,8,16 };
 
 static void I2C_IrqEventHandler(I2C_Handle_t* const obj);
 static void I2C_IrqErrorHandler(I2C_Handle_t* const obj);
@@ -161,36 +155,44 @@ static IRQn_Type GetIrqEventType(const I2C_Handle_t* const obj)
     return result;
 }
 
-
 static uint32_t RCC_GetPLLOutputClock(void)
 {
-    /*TODO:*/
+    /*TODO: not used for now */
+    return 0;
 }
 
-static uint8_t RCC_GetFrequency(void)
+/*Brief: Calculate I2C frequency
+ * [in] - none
+ * [out] - frequency in Hz
+ * */
+static uint32_t RCC_GetPCLK1Value(void)
 {
-    uint32_t clockSource = (RCC->CFGR >> 2) & 0x03;
-    uint32_t ahbPrescaler = (RCC->CFGR >> 4) & 0x0f;
-    uint32_t apb1Prescaler = (RCC->CFGR >> 10) & 0x07;
-    uint32_t ahbDevisor = 0;
-    uint32_t apb1Devisor = 0;
+    RCC_TypeDef* rcc = RCC;
+    const uint32_t RCC_CFGR = rcc->CFGR;
+
+    uint32_t clockSource = (RCC_CFGR & RCC_CFGR_SWS);
+    uint32_t ahbPrescaler = (RCC_CFGR >> RCC_CFGR_HPRE_Pos) & 0x0F;
+    uint32_t apb1Prescaler = (RCC_CFGR >> RCC_CFGR_PPRE1_Pos) & 0x07;
+    uint32_t ahbDivisor = 0;
+    uint32_t apb1Divisor = 0;
     uint32_t systemClock = 0;
 
     uint32_t pclk1 = 0;
 
     switch (clockSource)
     {
-        case 0:
-            systemClock = 16000000;
+        case RCC_CFGR_SWS_HSI:
+            systemClock = 16000000U;
             break;
 
-        case 1:
-            systemClock = 8000000;
+        case RCC_CFGR_SWS_HSE:
+            systemClock = 8000000U;
             break;
 
-        case 2:
+        case RCC_CFGR_SWS_PLL:
             systemClock = RCC_GetPLLOutputClock();
             break;
+
         default:
             ASSERT(false);
             break;
@@ -198,50 +200,64 @@ static uint8_t RCC_GetFrequency(void)
 
     if (ahbPrescaler < 8)
     {
-        ahbDevisor = 1;
+        ahbDivisor = 1;
     }
     else
     {
-        ahbDevisor = AHB_PRESCALERS[ahbPrescaler - 8];
+        ahbDivisor = AHB_PRESCALERS[ahbPrescaler - 8];
     }
 
     if (apb1Prescaler < 4)
     {
-        apb1Devisor = 1;
+        apb1Divisor = 1;
     }
     else
     {
-        apb1Devisor = APB1_PRESCALERS[apb1Prescaler - 4];
+        apb1Divisor = APB1_PRESCALERS[apb1Prescaler - 4];
     }
 
-    pclk1 = (systemClock / ahbDevisor) / apb1Devisor;
+    pclk1 = (systemClock / ahbDivisor) / apb1Divisor;
 
-    return (pclk1 / 1000000U);
+    return pclk1;
 }
 
-static void I2C_Speed(I2C_Handle_t* const obj)
+static void I2C_Frequency(I2C_Handle_t* const obj)
 {
     ASSERT(obj);
 
-    /*enter reset mode*/
-    obj->instance->CR1 |= (I2C_CR1_SWRST);
+    /* clock frequency derived from APB bus */
+    uint32_t rccFreq = RCC_GetPCLK1Value() / 1000000U;
 
-    /*exit reset mode*/
-    obj->instance->CR1 &= ~(I2C_CR1_SWRST);
-
-    /*clock frequency*/
-    obj->instance->CR2 |= (uint8_t)(RCC_GetFrequency() & 0x3F);//(I2C_CR2_FREQ_4); /*16 Mhz*/
-
-    //obj->instance->CCR = 80;
-
-    //obj->instance->TRISE = 17;
+    obj->instance->CR2 = (rccFreq & I2C_CR2_FREQ);
 }
 
 static void I2C_RiseTime(I2C_Handle_t* const obj)
 {
     ASSERT(obj);
 
-    uint8_t trise = (RCC_GetFrequency() + 1) & 0x3F;
+    uint32_t rccFreq = RCC_GetPCLK1Value() / 1000000U;
+    uint32_t trise = 0;
+
+    switch (obj->config.speed)
+    {
+        case I2C_SPEED_STANDARD_MODE:
+            trise = (rccFreq + 1);
+            break;
+
+        case I2C_SPEED_FAST_MODE:
+            trise = ((rccFreq * 300) / 1000) + 1;
+
+            if (trise > 63)
+            {
+                trise = 63;
+            }
+
+            break;
+
+        default:
+            ASSERT(false);
+            break;
+    }
 
     obj->instance->TRISE = trise;
 }
@@ -260,30 +276,95 @@ static void I2C_DisableACK(I2C_Handle_t* const obj)
     obj->instance->CR1 &= ~I2C_CR1_ACK;
 }
 
-static void I2C_Mode(I2C_Handle_t* const obj, I2C_MODES mode)
+static void I2C_Mode(I2C_Handle_t* const obj)
 {
     ASSERT(obj);
 
-    uint16_t ccrValue = 0;
-
-    if (mode == I2C_STANDARD_MODE)
+    switch (obj->config.speed)
     {
-        obj->instance->CCR &= ~(I2C_CCR_FS);
-        //ccrValue = I2C_GetFrequency() / (2 * );
-        //ccrValue = ccrValue & 0x0FFF;
+        case I2C_SPEED_STANDARD_MODE:
+
+            obj->instance->CCR &= ~(I2C_CCR_FS);
+
+            break;
+
+        case I2C_SPEED_FAST_MODE:
+
+            obj->instance->CCR |= (I2C_CCR_FS);
+
+            break;
+
+        default:
+            ASSERT(false);
+            break;
+    }
+}
+
+static void I2C_Duty(I2C_Handle_t* const obj)
+{
+    ASSERT(obj);
+
+    if (obj->config.dutyCycle)
+    {
+        obj->instance->CCR |= I2C_CCR_DUTY;
     }
     else
     {
-        obj->instance->CCR |= (I2C_CCR_FS);
+        obj->instance->CCR &= ~(I2C_CCR_DUTY);
     }
-
-    obj->instance->CCR = 80;
 }
 
-void I2C_Init(I2C_Handle_t* const obj, I2C_NAMES name/*, I2C_Config_t* config*/)
+
+/*
+ * RM0383
+ * 18.6.8 I2C Clock control register (I2C_CCR)
+ * */
+static void I2C_Clock(I2C_Handle_t* const obj)
 {
     ASSERT(obj);
-    //ASSERT(config != NULL);
+
+    uint32_t ccrValue = 0;
+    uint32_t rccFreq = RCC_GetPCLK1Value();
+
+    switch (obj->config.speed)
+    {
+        case I2C_SPEED_STANDARD_MODE:
+            ccrValue = (rccFreq / (2 * obj->config.speed));
+            if (ccrValue < 4)
+            {
+                ccrValue = 4;
+            }
+            break;
+
+        case I2C_SPEED_FAST_MODE:
+            if (obj->config.dutyCycle)
+            {
+                ccrValue = (rccFreq / (25 * obj->config.speed));
+            }
+            else
+            {
+                ccrValue = (rccFreq / (3 * obj->config.speed));
+            }
+
+            if (ccrValue < 1)
+            {
+                ccrValue = 1;
+            }
+            break;
+
+        default:
+            ASSERT(false);
+            break;
+    }
+
+    ccrValue = ccrValue & I2C_CCR_CCR;
+
+    obj->instance->CCR = ccrValue;
+}
+
+void I2C_Init(I2C_Handle_t* const obj, I2C_NAMES name)
+{
+    ASSERT(obj);
     ASSERT(name < I2C_COUNT);
 
     obj->initialized = false;
@@ -331,12 +412,22 @@ void I2C_Init(I2C_Handle_t* const obj, I2C_NAMES name/*, I2C_Config_t* config*/)
             break;
     }
 
-    /* I2C speed */
-    I2C_Speed(obj);
+    I2C_Frequency(obj);
 
-    I2C_EnableACK(obj);
+    I2C_Clock(obj);
 
-    I2C_Mode(obj, I2C_STANDARD_MODE);
+    if (obj->config.ackControl)
+    {
+        I2C_EnableACK(obj);
+    }
+    else
+    {
+        I2C_DisableACK(obj);
+    }
+
+    I2C_Mode(obj);
+
+    I2C_Duty(obj);
 
     I2C_RiseTime(obj);
 
@@ -346,7 +437,6 @@ void I2C_Init(I2C_Handle_t* const obj, I2C_NAMES name/*, I2C_Config_t* config*/)
 
     obj->currentTransaction = NULL;
 
-    /* I2C enable */
     I2C_Enable(obj);
 
     obj->initialized = true;
