@@ -299,6 +299,15 @@ void ADXL_ReadVectorAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, vo
 
 void ADXL_InitI2C(void)
 {
+#if 1
+    m_i2c.config.speed = I2C_SPEED_FAST_MODE;
+    m_i2c.config.dutyCycle = 1;
+    m_i2c.config.ackControl = 1;
+#else
+    m_i2c.config.speed = I2C_SPEED_STANDARD_MODE;
+    m_i2c.config.dutyCycle = 0;
+    m_i2c.config.ackControl = 1;
+#endif
     I2C_Init(&m_i2c, I2C_1);
 }
 
