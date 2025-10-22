@@ -314,7 +314,6 @@ static void I2C_Duty(I2C_Handle_t* const obj)
     }
 }
 
-
 /*
  * RM0383
  * 18.6.8 I2C Clock control register (I2C_CCR)
@@ -897,7 +896,6 @@ I2C_RESULT I2C_MasterTransmit_IT(I2C_Handle_t* const obj, I2C_Transaction_t* tra
 {
     ASSERT(obj != NULL);
     ASSERT(transaction != NULL);
-    //ASSERT(obj->initialized);
 
     if (!obj->initialized)
     {
