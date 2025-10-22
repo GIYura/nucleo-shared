@@ -6,14 +6,12 @@
 #include "adxl345-regs.h"
 #include "spi.h"
 
-#if 1
 #include "i2c.h"
 #define ADXL345_I2C_ADDRESS     0x53
-#define ADXL345_ID              0xE5
-#endif
 
 #define SPI_CLOCK_RATE  5000000     /* Hz */
 
+/*TODO:*/
 #if 0
 AdxlInterface_t g_adxlSpiDriver = {
         .init = &ADXL_Init,
@@ -52,10 +50,7 @@ typedef struct
 
 static AdxlRequest_t m_adxlRequest;
 static Adxl345_t m_adxl345;
-
-#if 1
 static I2C_Handle_t m_i2c;
-#endif
 
 static void AdxlCreateRequest(  AdxlRequest_t* req,
                                 BUS_TYPE bus,
@@ -79,14 +74,17 @@ static void OnRegisterRequestCompleted(void* context)
     Acceleration_t acceleration;
     AdxlRequest_t* request = (AdxlRequest_t*)context;
 
-    if (context == NULL)
-    {
-        return;
-    }
-
     switch (request->bus)
     {
         case BUS_SPI:
+            if (request->length == 0)
+            {
+                if (request->callback)
+                {
+                    request->callback(NULL, request->userContext);
+                }
+            }
+
             if (request->length == 2)
             {
                 if (request->callback)
@@ -163,7 +161,7 @@ static void I2C_OnRegisterWriteCompleted(void* context)
     }
 }
 
-void ADXL_Init(void)
+void ADXL_InitSPI(void)
 {
     SpiInit(&m_adxl345.spi, SPI_1, CPOL_1, CPHA_1, SPI_CLOCK_RATE);
 
@@ -171,7 +169,7 @@ void ADXL_Init(void)
     GpioInit(&m_adxl345.nss, PA_0, PIN_MODE_OUTPUT, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, 1);
 }
 
-void ADXL_ReadRegisterAsync(uint8_t address, ADXL_RequestHandler_t callback, void* context)
+void ADXL_ReadRegisterAsyncSPI(uint8_t address, ADXL_RequestHandler_t callback, void* context)
 {
     uint8_t tx[2] = {0x80 | address, 0xFF};
 
@@ -180,7 +178,7 @@ void ADXL_ReadRegisterAsync(uint8_t address, ADXL_RequestHandler_t callback, voi
     SpiTransaction_t spiTransaction = {
         .txBuffer = m_adxlRequest.tx,
         .rxBuffer = m_adxlRequest.rx,
-        .txLen = sizeof(tx),//2,
+        .txLen = sizeof(tx),
         .rxLen = m_adxlRequest.length,
         .preTransaction = &Adxl345_Activate,
         .postTransaction = &Adxl345_Deactivate,
@@ -189,6 +187,64 @@ void ADXL_ReadRegisterAsync(uint8_t address, ADXL_RequestHandler_t callback, voi
     };
 
     SpiTransfer_IT(&m_adxl345.spi, &spiTransaction);
+}
+
+void ADXL_WriteRegisterAsyncSPI(uint8_t address, ADXL_RequestHandler_t callback, void* value)
+{
+    uint8_t tx[2];
+    tx[0] = 0x00 | address;
+    tx[1] = *(uint8_t*)value;
+
+    AdxlCreateRequest(&m_adxlRequest, BUS_SPI, tx, sizeof(tx), m_adxlRequest.rx, 0, callback, NULL);
+
+    SpiTransaction_t spiTransaction = {
+        .txBuffer = m_adxlRequest.tx,
+        .rxBuffer = NULL,
+        .txLen = sizeof(tx),
+        .rxLen = m_adxlRequest.length,
+        .preTransaction = &Adxl345_Activate,
+        .postTransaction = &Adxl345_Deactivate,
+        .onTransactionDone = &OnRegisterRequestCompleted,
+        .context = &m_adxlRequest
+    };
+
+    SpiTransfer_IT(&m_adxl345.spi, &spiTransaction);
+}
+
+void ADXL_ReadVectorAsyncSPI(uint8_t address, ADXL_RequestHandler_t callback, void* context)
+{
+    uint8_t tx[7];
+    memset(tx, 0xff, sizeof(tx));
+    tx[0] = 0x80 | 0x40 | address;
+
+    AdxlCreateRequest(&m_adxlRequest, BUS_SPI, tx, sizeof(tx), m_adxlRequest.rx, 7, callback, context);
+
+    SpiTransaction_t spiTransaction = {
+        .txBuffer = m_adxlRequest.tx,
+        .rxBuffer = m_adxlRequest.rx,
+        .txLen = sizeof(tx),
+        .rxLen = m_adxlRequest.length,
+        .preTransaction = &Adxl345_Activate,
+        .postTransaction = &Adxl345_Deactivate,
+        .onTransactionDone = OnRegisterRequestCompleted,
+        .context = &m_adxlRequest
+    };
+
+    SpiTransfer_IT(&m_adxl345.spi, &spiTransaction);
+}
+
+void ADXL_InitI2C(void)
+{
+#if 0
+    m_i2c.config.speed = I2C_SPEED_FAST_MODE;
+    m_i2c.config.dutyCycle = 1;
+    m_i2c.config.ackControl = 1;
+#else
+    m_i2c.config.speed = I2C_SPEED_STANDARD_MODE;
+    m_i2c.config.dutyCycle = 0;
+    m_i2c.config.ackControl = 1;
+#endif
+    I2C_Init(&m_i2c, I2C_1);
 }
 
 void ADXL_ReadRegisterAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* context)
@@ -200,7 +256,7 @@ void ADXL_ReadRegisterAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, 
     I2C_Transaction_t i2cTransaction = {
         .devAddress = ADXL345_I2C_ADDRESS,
         .txBuffer = &m_adxlRequest.tx[0],
-        .txLen = sizeof(tx),//1,
+        .txLen = sizeof(tx),
         .rxBuffer = m_adxlRequest.rx,
         .rxLen = m_adxlRequest.length,
         .onTxDone = &I2C_OnRegisterWriteCompleted,
@@ -233,50 +289,6 @@ void ADXL_WriteRegisterAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback,
     I2C_MasterTransmit_IT(&m_i2c, &i2cTransaction);
 }
 
-void ADXL_WriteRegisterAsync(uint8_t address, void* value)
-{
-    uint8_t tx[2];
-    tx[0] = 0x00 | address;
-    tx[1] = *(uint8_t*)value;
-
-    AdxlCreateRequest(&m_adxlRequest, BUS_SPI, tx, sizeof(tx), m_adxlRequest.rx, 0, NULL, NULL);
-
-    SpiTransaction_t spiTransaction = {
-        .txBuffer = m_adxlRequest.tx,
-        .rxBuffer = NULL,
-        .txLen = sizeof(tx),
-        .rxLen = m_adxlRequest.length,
-        .preTransaction = &Adxl345_Activate,
-        .postTransaction = &Adxl345_Deactivate,
-        .onTransactionDone = &OnRegisterRequestCompleted,
-        .context = NULL
-    };
-
-    SpiTransfer_IT(&m_adxl345.spi, &spiTransaction);
-}
-
-void ADXL_ReadVectorAsync(uint8_t address, ADXL_RequestHandler_t callback, void* context)
-{
-    uint8_t tx[7];
-    memset(tx, 0xff, sizeof(tx));
-    tx[0] = 0x80 | 0x40 | address;
-
-    AdxlCreateRequest(&m_adxlRequest, BUS_SPI, tx, sizeof(tx), m_adxlRequest.rx, 7, callback, context);
-
-    SpiTransaction_t spiTransaction = {
-        .txBuffer = m_adxlRequest.tx,
-        .rxBuffer = m_adxlRequest.rx,
-        .txLen = sizeof(tx),
-        .rxLen = m_adxlRequest.length,
-        .preTransaction = &Adxl345_Activate,
-        .postTransaction = &Adxl345_Deactivate,
-        .onTransactionDone = OnRegisterRequestCompleted,
-        .context = &m_adxlRequest
-    };
-
-    SpiTransfer_IT(&m_adxl345.spi, &spiTransaction);
-}
-
 void ADXL_ReadVectorAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* context)
 {
     uint8_t tx[1] = { address };
@@ -296,44 +308,6 @@ void ADXL_ReadVectorAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, vo
 
     I2C_MasterTransmit_IT(&m_i2c, &i2cTransaction);
 }
-
-void ADXL_InitI2C(void)
-{
-#if 1
-    m_i2c.config.speed = I2C_SPEED_FAST_MODE;
-    m_i2c.config.dutyCycle = 1;
-    m_i2c.config.ackControl = 1;
-#else
-    m_i2c.config.speed = I2C_SPEED_STANDARD_MODE;
-    m_i2c.config.dutyCycle = 0;
-    m_i2c.config.ackControl = 1;
-#endif
-    I2C_Init(&m_i2c, I2C_1);
-}
-
-/**/
-#if 0
-void AdxlInit(Adxl_t* dev, AdxlInterface_t* bus)
-{
-    dev->bus = bus;
-
-    dev->bus->init();
-}
-
-void AdxlReadRegisterAsync(const Adxl_t* const dev, uint8_t address, ADXL_RequestHandler_t callback, void* context)
-{
-    ASSERT(dev != NULL);
-
-    dev->bus->readRegisterAsync(address, callback, context);
-}
-
-void AdxlWriteRegisterAsync(const Adxl_t* const dev, uint8_t address, void* value)
-{
-    ASSERT(dev != NULL);
-
-    dev->bus->writeRegisterAsync(address, value);
-}
-#endif
 
 static void AdxlCreateRequest(  AdxlRequest_t* req,
                                 BUS_TYPE bus,
@@ -363,4 +337,26 @@ static void AdxlCreateRequest(  AdxlRequest_t* req,
     req->userContext = context;
 }
 
+/* TODO: */
+#if 0
+void AdxlInit(Adxl_t* dev, AdxlInterface_t* bus)
+{
+    dev->bus = bus;
 
+    dev->bus->init();
+}
+
+void AdxlReadRegisterAsync(const Adxl_t* const dev, uint8_t address, ADXL_RequestHandler_t callback, void* context)
+{
+    ASSERT(dev != NULL);
+
+    dev->bus->readRegisterAsync(address, callback, context);
+}
+
+void AdxlWriteRegisterAsync(const Adxl_t* const dev, uint8_t address, void* value)
+{
+    ASSERT(dev != NULL);
+
+    dev->bus->writeRegisterAsync(address, value);
+}
+#endif

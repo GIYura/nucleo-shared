@@ -15,14 +15,11 @@ typedef struct
     int16_t z;
 } Acceleration_t;
 
-/*
- * SPI section
- * */
-/*Brief: ADXL345 initialization
+/*Brief: ADXL345 initialization over SPI
  * [in] - none
  * [out] - none
  * */
-void ADXL_Init(void);
+void ADXL_InitSPI(void);
 
 /*Brief: ADXL345 read single register async
  * [in] - address - register address
@@ -30,14 +27,14 @@ void ADXL_Init(void);
  * [in] - context - response storage address
  * [out] - none
  * */
-void ADXL_ReadRegisterAsync(uint8_t address, ADXL_RequestHandler_t callback, void* context);
+void ADXL_ReadRegisterAsyncSPI(uint8_t address, ADXL_RequestHandler_t callback, void* context);
 
 /*Brief: ADXL345 write single register async
  * [in] - address - register address
  * [in] - value - new value
  * [out] - none
  * */
-void ADXL_WriteRegisterAsync(uint8_t address, void* value);
+void ADXL_WriteRegisterAsyncSPI(uint8_t address, ADXL_RequestHandler_t callback, void* value);
 
 /*Brief: ADXL345 read vector async
  * [in] - address - register address
@@ -45,14 +42,35 @@ void ADXL_WriteRegisterAsync(uint8_t address, void* value);
  * [in] - context - response storage address
  * [out] - none
  * */
-void ADXL_ReadVectorAsync(uint8_t address, ADXL_RequestHandler_t callback, void* context);
+void ADXL_ReadVectorAsyncSPI(uint8_t address, ADXL_RequestHandler_t callback, void* context);
 
-/*
- * I2C section
+/*Brief: ADXL345 initialization over I2C
+ * [in] - none
+ * [out] - none
  * */
 void ADXL_InitI2C(void);
+
+/*Brief: ADXL345 read single register async
+ * [in] - address - register address
+ * [in] - callback - callback function on receive done
+ * [in] - context - response storage address
+ * [out] - none
+ * */
 void ADXL_ReadRegisterAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* context);
+
+/*Brief: ADXL345 write single register async
+ * [in] - address - register address
+ * [in] - value - new value
+ * [out] - none
+ * */
 void ADXL_WriteRegisterAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* value);
+
+/*Brief: ADXL345 read vector async
+ * [in] - address - register address
+ * [in] - callback - callback function on receive done
+ * [in] - context - response storage address
+ * [out] - none
+ * */
 void ADXL_ReadVectorAsyncI2C(uint8_t address, ADXL_RequestHandler_t callback, void* context);
 
 #endif /* ADXL345_H */
