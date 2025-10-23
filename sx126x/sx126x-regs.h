@@ -1,5 +1,5 @@
-#ifndef SX126x_REGS_H
-#define SX126x_REGS_H
+#ifndef SX126X_REGS_H
+#define SX126X_REGS_H
 
 /* SX126X register map */
 #define SX126X_REG_WHITENING_INITIAL_MSB                0x06B8
