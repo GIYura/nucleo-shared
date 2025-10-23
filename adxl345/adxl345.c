@@ -28,7 +28,7 @@ AdxlInterface_t g_adxlI2CDriver = {
 
 typedef struct
 {
-    Spi_t spi;
+    SPI_Handle_t spi;
     Gpio_t nss;
 } Adxl345_t;
 
@@ -175,7 +175,7 @@ void ADXL_ReadRegisterAsyncSPI(uint8_t address, ADXL_RequestHandler_t callback, 
 
     AdxlCreateRequest(&m_adxlRequest, BUS_SPI, tx, sizeof(tx), m_adxlRequest.rx, 2, callback, context);
 
-    SpiTransaction_t spiTransaction = {
+    SPI_Transaction_t spiTransaction = {
         .txBuffer = m_adxlRequest.tx,
         .rxBuffer = m_adxlRequest.rx,
         .txLen = sizeof(tx),
@@ -197,7 +197,7 @@ void ADXL_WriteRegisterAsyncSPI(uint8_t address, ADXL_RequestHandler_t callback,
 
     AdxlCreateRequest(&m_adxlRequest, BUS_SPI, tx, sizeof(tx), m_adxlRequest.rx, 0, callback, NULL);
 
-    SpiTransaction_t spiTransaction = {
+    SPI_Transaction_t spiTransaction = {
         .txBuffer = m_adxlRequest.tx,
         .rxBuffer = NULL,
         .txLen = sizeof(tx),
@@ -219,7 +219,7 @@ void ADXL_ReadVectorAsyncSPI(uint8_t address, ADXL_RequestHandler_t callback, vo
 
     AdxlCreateRequest(&m_adxlRequest, BUS_SPI, tx, sizeof(tx), m_adxlRequest.rx, 7, callback, context);
 
-    SpiTransaction_t spiTransaction = {
+    SPI_Transaction_t spiTransaction = {
         .txBuffer = m_adxlRequest.tx,
         .rxBuffer = m_adxlRequest.rx,
         .txLen = sizeof(tx),
