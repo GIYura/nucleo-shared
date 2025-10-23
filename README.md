@@ -18,7 +18,9 @@ Contains SW modules shared accross projects.
 | spi             | SPI driver                  |                              |
 | i2c             | I2C driver                  |                              |
 | uart            | UART driver                 |                              |
-| adxl345         | ADXL345 driver              |                              |
+| adxl345         | ADXL345 driver              | accelerometer                |
+| sx126x          | SX126x driver               | sx126x specific              |
+| radio           | Radio driver                | abstract interface           |
 | utils           | Helper macros               |                              |
 | freeRTOS-kernel | FreeRTOS kernel files       | FreeRTOS kernel V11.1.0      |
 
