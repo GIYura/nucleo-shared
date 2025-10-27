@@ -5,7 +5,7 @@
 #include "logger.h"
 #include "uart.h"
 
-static UartHandle_t m_uart;
+static UART_Handle_t m_uart;
 static LOG_LEVEL m_logLevel = LOG_LEVEL_DEBUG;
 
 const char* const NEW_LINE = "\r\n";

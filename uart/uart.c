@@ -8,17 +8,24 @@
 #define UART_2_CLOCK_ENABLE (RCC->APB1ENR |= (RCC_APB1ENR_USART2EN))
 #define UART_6_CLOCK_ENABLE (RCC->APB2ENR |= (RCC_APB2ENR_USART6EN))
 
-static UartHandle_t* m_UartIrq[UART_COUNT];
+static UART_Handle_t* m_UartIrq[UART_COUNT];
 
-static void EnableTxInterrupt(UartHandle_t* const obj);
-static void DisableTxInterrupt(UartHandle_t* const obj);
+static void TxInterruptEnable(UART_Handle_t* const obj);
+static void TxInterruptDisable(UART_Handle_t* const obj);
 
-static void EnableTcInterrupt(UartHandle_t* const obj);
-static void DisableTcInterrupt(UartHandle_t* const obj);
+static void TcInterruptEnable(UART_Handle_t* const obj);
+static void TcInterruptDisable(UART_Handle_t* const obj);
 
-static IRQn_Type GetIrqType(const UartHandle_t* const obj);
+static IRQn_Type GetIrqType(const UART_Handle_t* const obj);
 
-static void UartOnInterrupt(UartHandle_t* const obj);
+static void UartOnInterrupt(UART_Handle_t* const obj);
+
+static void TransmitterEnable(UART_Handle_t* const obj);
+static void ReceiverEnable(UART_Handle_t* const obj);
+
+static void SetFormat(UART_Handle_t* const obj);
+
+static void UartEnable(UART_Handle_t* const obj);
 
 /*Brief: Converts baud rate in to register value */
 static uint16_t ComputeBaudRate(uint32_t pclk, BAUD_RATE baud)
@@ -81,7 +88,7 @@ static uint16_t ComputeBaudRate(uint32_t pclk, BAUD_RATE baud)
     return (mantissa << 4) | (fraction & 0x0F);
 }
 
-void UartInit(UartHandle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
+void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
 {
     ASSERT(obj != NULL);
     ASSERT(uartName < UART_COUNT);
@@ -95,8 +102,8 @@ void UartInit(UartHandle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
     switch (uartName)
     {
         case UART_1:
-            GpioInit(&obj->GpioTx, PA_9, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
-            GpioInit(&obj->GpioRx, PA_10, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
+            GpioInit(&obj->gpio.tx, PA_9, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
+            GpioInit(&obj->gpio.rx, PA_10, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
 
             UART_1_CLOCK_ENABLE;
 
@@ -107,8 +114,8 @@ void UartInit(UartHandle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
             break;
 
         case UART_2:
-            GpioInit(&obj->GpioTx, PD_5, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
-            GpioInit(&obj->GpioRx, PD_6, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
+            GpioInit(&obj->gpio.tx, PD_5, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
+            GpioInit(&obj->gpio.rx, PD_6, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_7);
 
             UART_2_CLOCK_ENABLE;
 
@@ -119,8 +126,8 @@ void UartInit(UartHandle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
             break;
 
         case UART_6:
-            GpioInit(&obj->GpioTx, PA_11, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_8);
-            GpioInit(&obj->GpioRx, PA_12, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_8);
+            GpioInit(&obj->gpio.tx, PA_11, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_8);
+            GpioInit(&obj->gpio.rx, PA_12, PIN_MODE_ALTERNATE, PIN_TYPE_NO_PULL_UP_PULL_DOWN, PIN_SPEED_FAST, PIN_CONFIG_PUSH_PULL, PIN_AF_8);
 
             UART_6_CLOCK_ENABLE;
 
@@ -135,34 +142,46 @@ void UartInit(UartHandle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
             break;
     }
 
-    /* transmitter enable */
-    obj->instance->CR1 |= USART_CR1_TE;
+    TransmitterEnable(obj);
 
-    /* receiver enable */
-    obj->instance->CR1 |= USART_CR1_RE;
+    ReceiverEnable(obj);
 
-    /* format: 1 Start bit, 8 Data bits, n Stop bit */
-    obj->instance->CR1 &= ~(USART_CR1_M);
+    SetFormat(obj);
 
-    /* Parity control disabled */
-    obj->instance->CR1 &= ~(USART_CR1_PCE);
-
-    /* 1 Stop bit */
-    obj->instance->CR2 &= ~(USART_CR2_STOP);
-
-    /* oversampling by 16 */
-    obj->instance->CR1 &= ~(USART_CR1_OVER8);
-
-    /* enable USART */
-    obj->instance->CR1 |= USART_CR1_UE;
+    UartEnable(obj);
 
     BufferCreate(&obj->txBuffer, &obj->txData, sizeof(obj->txData), sizeof(uint8_t), true);
-
-    m_UartIrq[obj->uartName] = obj;
 
     obj->initialized = true;
 
     NVIC_EnableIRQ(GetIrqType(obj));
+
+    m_UartIrq[obj->uartName] = obj;
+}
+
+void UartWrite(UART_Handle_t* const obj, const uint8_t* const buffer, uint8_t size)
+{
+    ASSERT(obj != NULL);
+
+    for (uint8_t i = 0; i < size; i++)
+    {
+        BufferPut(&obj->txBuffer, &buffer[i], sizeof(uint8_t));
+    }
+
+    if (!obj->isTransmitting)
+    {
+        obj->isTransmitting = true;
+        obj->isTransmitCompeted = false;
+
+        TxInterruptEnable(obj);
+    }
+}
+
+bool UartIdle(UART_Handle_t* const obj)
+{
+    ASSERT(obj != NULL);
+
+    return obj->isTransmitCompeted;
 }
 
 void USART1_IRQHandler(void)
@@ -180,53 +199,35 @@ void USART6_IRQHandler(void)
     UartOnInterrupt(m_UartIrq[UART_6]);
 }
 
-void UartWrite(UartHandle_t* const obj, uint8_t* buffer, uint8_t size)
-{
-    ASSERT(obj != NULL);
-
-    for (uint8_t i = 0; i < size; i++)
-    {
-        BufferPut(&obj->txBuffer, &buffer[i], sizeof(uint8_t));
-    }
-
-    if (!obj->isTransmitting)
-    {
-        obj->isTransmitting = true;
-        obj->isTransmitCompeted = false;
-
-        EnableTxInterrupt(obj);
-    }
-}
-
-static void EnableTxInterrupt(UartHandle_t* const obj)
+static void TxInterruptEnable(UART_Handle_t* const obj)
 {
     ASSERT(obj != NULL);
 
     obj->instance->CR1 |= (USART_CR1_TXEIE);
 }
 
-static void DisableTxInterrupt(UartHandle_t* const obj)
+static void TxInterruptDisable(UART_Handle_t* const obj)
 {
     ASSERT(obj != NULL);
 
     obj->instance->CR1 &= ~(USART_CR1_TXEIE);
 }
 
-static void EnableTcInterrupt(UartHandle_t* const obj)
+static void TcInterruptEnable(UART_Handle_t* const obj)
 {
     ASSERT(obj != NULL);
 
     obj->instance->CR1 |= (USART_CR1_TCIE);
 }
 
-static void DisableTcInterrupt(UartHandle_t* const obj)
+static void TcInterruptDisable(UART_Handle_t* const obj)
 {
     ASSERT(obj != NULL);
 
     obj->instance->CR1 &= ~(USART_CR1_TCIE);
 }
 
-static IRQn_Type GetIrqType(const UartHandle_t* const obj)
+static IRQn_Type GetIrqType(const UART_Handle_t* const obj)
 {
     ASSERT(obj != NULL);
 
@@ -254,7 +255,7 @@ static IRQn_Type GetIrqType(const UartHandle_t* const obj)
     return result;
 }
 
-static void UartOnInterrupt(UartHandle_t* const obj)
+static void UartOnInterrupt(UART_Handle_t* const obj)
 {
     uint8_t item = 0;
 
@@ -267,8 +268,8 @@ static void UartOnInterrupt(UartHandle_t* const obj)
         }
         else
         {
-            DisableTxInterrupt(obj);
-            EnableTcInterrupt(obj);
+            TxInterruptDisable(obj);
+            TcInterruptEnable(obj);
         }
     }
     /*TODO: RX */
@@ -278,17 +279,47 @@ static void UartOnInterrupt(UartHandle_t* const obj)
     {
         obj->instance->SR &= ~(USART_SR_TC);
 
-        DisableTcInterrupt(obj);
+        TcInterruptDisable(obj);
 
         obj->isTransmitting = false;
         obj->isTransmitCompeted = true;
     }
 }
 
-bool UartIdle(UartHandle_t* const obj)
+static void TransmitterEnable(UART_Handle_t* const obj)
 {
     ASSERT(obj != NULL);
 
-    return obj->isTransmitCompeted;
+    obj->instance->CR1 |= USART_CR1_TE;
 }
 
+static void ReceiverEnable(UART_Handle_t* const obj)
+{
+    ASSERT(obj != NULL);
+
+    obj->instance->CR1 |= USART_CR1_RE;
+}
+
+static void SetFormat(UART_Handle_t* const obj)
+{
+    ASSERT(obj != NULL);
+
+    /* format: 1 Start bit, 8 Data bits, n Stop bit */
+    obj->instance->CR1 &= ~(USART_CR1_M);
+
+    /* Parity control disabled */
+    obj->instance->CR1 &= ~(USART_CR1_PCE);
+
+    /* 1 Stop bit */
+    obj->instance->CR2 &= ~(USART_CR2_STOP);
+
+    /* oversampling by 16 */
+    obj->instance->CR1 &= ~(USART_CR1_OVER8);
+}
+
+static void UartEnable(UART_Handle_t* const obj)
+{
+    ASSERT(obj != NULL);
+
+    obj->instance->CR1 |= USART_CR1_UE;
+}
