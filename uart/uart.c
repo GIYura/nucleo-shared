@@ -8,6 +8,9 @@
 #define UART_2_CLOCK_ENABLE (RCC->APB1ENR |= (RCC_APB1ENR_USART2EN))
 #define UART_6_CLOCK_ENABLE (RCC->APB2ENR |= (RCC_APB2ENR_USART6EN))
 
+#define DMA_1_CLOCK_ENABLE (RCC->AHB1ENR |= (RCC_AHB1ENR_DMA1EN))
+#define DMA_2_CLOCK_ENABLE (RCC->AHB1ENR |= (RCC_AHB1ENR_DMA2EN))
+
 static UART_Handle_t* m_UartIrq[UART_COUNT];
 
 static void TxInterruptEnable(UART_Handle_t* const obj);
@@ -26,6 +29,8 @@ static void ReceiverEnable(UART_Handle_t* const obj);
 static void SetFormat(UART_Handle_t* const obj);
 
 static void UartEnable(UART_Handle_t* const obj);
+
+static void DMA_Config(UART_Handle_t* const obj, UART_NAMES uartName);
 
 /*Brief: Converts baud rate in to register value */
 static uint16_t ComputeBaudRate(uint32_t pclk, BAUD_RATE baud)
@@ -322,4 +327,67 @@ static void UartEnable(UART_Handle_t* const obj)
     ASSERT(obj != NULL);
 
     obj->instance->CR1 |= USART_CR1_UE;
+}
+
+static void DMA_Config(UART_Handle_t* const obj, UART_NAMES uartName)
+{
+    ASSERT(obj != NULL);
+
+    switch (uartName)
+    {
+        case UART_1:
+            DMA_2_CLOCK_ENABLE;
+
+            DMA2_Stream7->CR &= ~DMA_SxCR_EN;
+
+            while (DMA2_Stream7->CR & DMA_SxCR_EN);
+
+            DMA2_Stream7->PAR = obj->instance->DR;
+            DMA2_Stream7->CR = (4U << DMA_SxCR_CHSEL_Pos)  /* Channel 4 */
+                               | DMA_SxCR_PL_1             /* High priority */
+                               | DMA_SxCR_DIR_0            /* Memory -> Peripheral */
+                               | DMA_SxCR_MINC;            /* Increment memory */
+
+            DMA2_Stream7->FCR = 0;  /* Direct mode (no FIFO) */
+
+            break;
+
+        case UART_2:
+            DMA_1_CLOCK_ENABLE;
+
+            DMA2_Stream6->CR &= ~DMA_SxCR_EN;
+
+            while (DMA2_Stream6->CR & DMA_SxCR_EN);
+
+            DMA2_Stream6->PAR = obj->instance->DR;
+            DMA2_Stream6->CR = (4U << DMA_SxCR_CHSEL_Pos)  /* Channel 4 */
+                               | DMA_SxCR_PL_1             /* High priority */
+                               | DMA_SxCR_DIR_0            /* Memory -> Peripheral */
+                               | DMA_SxCR_MINC;            /* Increment memory */
+
+            DMA2_Stream6->FCR = 0;  /* Direct mode (no FIFO) */
+
+            break;
+
+        case UART_6:
+            DMA_2_CLOCK_ENABLE;
+
+            DMA2_Stream7->CR &= ~DMA_SxCR_EN;
+
+            while (DMA2_Stream7->CR & DMA_SxCR_EN);
+
+            DMA2_Stream7->PAR = obj->instance->DR;
+            DMA2_Stream7->CR = (5U << DMA_SxCR_CHSEL_Pos)  /* Channel 5 */
+                               | DMA_SxCR_PL_1             /* High priority */
+                               | DMA_SxCR_DIR_0            /* Memory -> Peripheral */
+                               | DMA_SxCR_MINC;            /* Increment memory */
+
+            DMA2_Stream7->FCR = 0;  /* Direct mode (no FIFO) */
+
+            break;
+
+        default:
+            ASSERT(false);
+            break;
+    }
 }
