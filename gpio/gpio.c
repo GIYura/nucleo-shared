@@ -71,6 +71,11 @@ void GpioInit(  Gpio_t* const obj,
 
     if (mode == PIN_MODE_ALTERNATE)
     {
+        if (config == PIN_CONFIG_OPEN_DRAIN)
+        {
+            obj->port->OTYPER |= (config << (obj->pinIndex));
+        }
+
         if (obj->pinIndex < 8)
         {
             obj->port->AFR[0] |= (value << (obj->pinIndex * 4));

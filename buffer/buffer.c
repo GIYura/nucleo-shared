@@ -94,3 +94,16 @@ bool BufferGet(Buffer_t* const buffer, void* data, uint16_t size)
 
     return true;
 }
+
+void* BufferFront(const Buffer_t* const buffer)
+{
+    ASSERT(buffer != NULL);
+
+    if (BufferIsEmpty(buffer))
+    {
+        return NULL;
+    }
+
+    return &(buffer->data[buffer->start]);
+}
+
