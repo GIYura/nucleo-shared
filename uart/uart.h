@@ -46,15 +46,21 @@ typedef struct
     Gpio_t rx;
 } UART_GPIO_t;
 
+typedef void (*UART_EventHandler_t)(void* context);
+
 typedef struct
 {
     USART_TypeDef* instance;
     UART_NAMES uartName;
     UART_GPIO_t gpio;
     Buffer_t txBuffer;
+    Buffer_t rxBuffer;
+    UART_EventHandler_t onRxDone;
     uint8_t txData[TX_BUFFER_SIZE + 1];
+    uint8_t rxData[TX_BUFFER_SIZE + 1];
     volatile bool isTransmitting;
     volatile bool isTransmitCompeted;
+    TIM_TypeDef* timer;
     bool initialized;
 } UART_Handle_t;
 
@@ -72,6 +78,13 @@ void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud);
  * [out] - none
  * */
 void UartWrite(UART_Handle_t* const obj, const uint8_t* const buffer, uint8_t size);
+
+/*Brief: Register receive callback
+ * [in] - obj - pointer to UART handle
+ * [in] - callback - callback
+ * [out] - none
+ * */
+void UartRegisterReceiveHandler(UART_Handle_t* const obj, UART_EventHandler_t callback);
 
 /*Brief: Check if UART is in Idle state
  * [in] - obj - pointer to UART handle

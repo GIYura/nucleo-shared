@@ -11,10 +11,16 @@
 #define DMA_1_CLOCK_ENABLE (RCC->AHB1ENR |= (RCC_AHB1ENR_DMA1EN))
 #define DMA_2_CLOCK_ENABLE (RCC->AHB1ENR |= (RCC_AHB1ENR_DMA2EN))
 
+#define UART_RX_TIMEOUT     50     /* ms */
+#define TIM_2_CLOCK_ENABLE  (RCC->APB1ENR |= (RCC_APB1ENR_TIM2EN))
+
 static UART_Handle_t* m_UartIrq[UART_COUNT];
 
 static void TxInterruptEnable(UART_Handle_t* const obj);
 static void TxInterruptDisable(UART_Handle_t* const obj);
+
+static void RxInterruptEnable(UART_Handle_t* const obj);
+static void RxInterruptDisable(UART_Handle_t* const obj);
 
 static void TcInterruptEnable(UART_Handle_t* const obj);
 static void TcInterruptDisable(UART_Handle_t* const obj);
@@ -22,6 +28,7 @@ static void TcInterruptDisable(UART_Handle_t* const obj);
 static IRQn_Type GetIrqType(const UART_Handle_t* const obj);
 
 static void UartOnInterrupt(UART_Handle_t* const obj);
+static void UartRxTimeout(UART_Handle_t* const obj);
 
 static void TransmitterEnable(UART_Handle_t* const obj);
 static void ReceiverEnable(UART_Handle_t* const obj);
@@ -31,6 +38,9 @@ static void SetFormat(UART_Handle_t* const obj);
 static void UartEnable(UART_Handle_t* const obj);
 
 static void DMA_Config(UART_Handle_t* const obj, UART_NAMES uartName);
+
+static void TimerInit(UART_Handle_t* const obj, uint32_t timeoutMs);
+static void TimerStart(UART_Handle_t* const obj);
 
 /*Brief: Converts baud rate in to register value */
 static uint16_t ComputeBaudRate(uint32_t pclk, BAUD_RATE baud)
@@ -101,7 +111,7 @@ void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
 
     obj->isTransmitting = false;
     obj->uartName = uartName;
-    obj->isTransmitCompeted = false;
+    obj->isTransmitCompeted = true;
     obj->initialized = false;
 
     switch (uartName)
@@ -115,6 +125,8 @@ void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
             obj->instance = USART1;
 
             obj->instance->BRR = ComputeBaudRate(SystemCoreClock, baud);
+
+            obj->timer = TIM2;
 
             break;
 
@@ -150,18 +162,22 @@ void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
     TransmitterEnable(obj);
 
     ReceiverEnable(obj);
+    RxInterruptEnable(obj);
 
     SetFormat(obj);
 
     UartEnable(obj);
 
     BufferCreate(&obj->txBuffer, &obj->txData, sizeof(obj->txData), sizeof(uint8_t), true);
-
-    obj->initialized = true;
+    BufferCreate(&obj->rxBuffer, &obj->rxData, sizeof(obj->rxData), sizeof(uint8_t), true);
 
     NVIC_EnableIRQ(GetIrqType(obj));
 
     m_UartIrq[obj->uartName] = obj;
+
+    TimerInit(obj, UART_RX_TIMEOUT);
+
+    obj->initialized = true;
 }
 
 void UartWrite(UART_Handle_t* const obj, const uint8_t* const buffer, uint8_t size)
@@ -180,6 +196,13 @@ void UartWrite(UART_Handle_t* const obj, const uint8_t* const buffer, uint8_t si
 
         TxInterruptEnable(obj);
     }
+}
+
+void UartRegisterReceiveHandler(UART_Handle_t* const obj, UART_EventHandler_t callback)
+{
+    ASSERT(obj != NULL);
+
+    obj->onRxDone = callback;
 }
 
 bool UartIdle(UART_Handle_t* const obj)
@@ -216,6 +239,20 @@ static void TxInterruptDisable(UART_Handle_t* const obj)
     ASSERT(obj != NULL);
 
     obj->instance->CR1 &= ~(USART_CR1_TXEIE);
+}
+
+static void RxInterruptEnable(UART_Handle_t* const obj)
+{
+    ASSERT(obj != NULL);
+
+    obj->instance->CR1 |= (USART_CR1_RXNEIE);
+}
+
+static void RxInterruptDisable(UART_Handle_t* const obj)
+{
+    ASSERT(obj != NULL);
+
+    obj->instance->CR1 &= ~(USART_CR1_RXNEIE);
 }
 
 static void TcInterruptEnable(UART_Handle_t* const obj)
@@ -277,7 +314,20 @@ static void UartOnInterrupt(UART_Handle_t* const obj)
             TcInterruptEnable(obj);
         }
     }
-    /*TODO: RX */
+    /* RX handle */
+    if ((obj->instance->SR & (USART_SR_RXNE)) && (obj->instance->CR1 & (USART_CR1_RXNEIE)))
+    {
+        item = obj->instance->DR;
+
+        if (BufferPut(&obj->rxBuffer, &item, sizeof(item)))
+        {
+            TimerStart(obj);
+        }
+        else
+        {
+            RxInterruptDisable(obj);
+        }
+    }
 
     /* TX complete handle */
     if ((obj->instance->SR & (USART_SR_TC)) && (obj->instance->CR1 & (USART_CR1_TCIE)))
@@ -288,6 +338,23 @@ static void UartOnInterrupt(UART_Handle_t* const obj)
 
         obj->isTransmitting = false;
         obj->isTransmitCompeted = true;
+    }
+}
+
+static void UartRxTimeout(UART_Handle_t* const obj)
+{
+    ASSERT(obj != NULL);
+
+    /* Update interrupt pending */
+    if (obj->timer->SR & TIM_SR_UIF)
+    {
+        /* read-clear-write-0 */
+        obj->timer->SR &= ~TIM_SR_UIF;
+
+        if (obj->onRxDone != NULL)
+        {
+            (*obj->onRxDone)(obj);
+        }
     }
 }
 
@@ -329,6 +396,44 @@ static void UartEnable(UART_Handle_t* const obj)
     obj->instance->CR1 |= USART_CR1_UE;
 }
 
+static void TimerInit(UART_Handle_t* const obj, uint32_t timeoutMs)
+{
+    ASSERT(obj != NULL);
+
+    TIM_2_CLOCK_ENABLE;
+
+    /* Prescaler value 16 Mhz / 16 = 1 khz (1 ms) */
+    obj->timer->PSC = 16000 - 1;
+
+    /* Auto-reload value */
+    obj->timer->ARR = timeoutMs - 1;
+
+    /* One-pulse mode */
+    obj->timer->CR1 |= TIM_CR1_OPM;
+
+    /* Update interrupt enabled */
+    obj->timer->DIER |= TIM_DIER_UIE;
+
+    NVIC_EnableIRQ(TIM2_IRQn);
+    NVIC_SetPriority(TIM2_IRQn, 1);
+}
+
+static void TimerStart(UART_Handle_t* const obj)
+{
+    ASSERT(obj != NULL);
+
+    obj->timer->CNT = 0;
+
+    /* Counter enabled */
+    obj->timer->CR1 |= TIM_CR1_CEN;
+}
+
+void TIM2_IRQHandler(void)
+{
+    UartRxTimeout(m_UartIrq[UART_1]);
+}
+
+#if 0
 static void DMA_Config(UART_Handle_t* const obj, UART_NAMES uartName)
 {
     ASSERT(obj != NULL);
@@ -391,3 +496,4 @@ static void DMA_Config(UART_Handle_t* const obj, UART_NAMES uartName)
             break;
     }
 }
+#endif
