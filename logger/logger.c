@@ -9,26 +9,33 @@ static UART_Handle_t m_uart;
 static LOG_LEVEL m_logLevel = LOG_LEVEL_DEBUG;
 
 const char* const NEW_LINE = "\r\n";
-static const char* const PREFIXES[] = { "[DBG]: ", "[INFO]:", "[WARN]: ", "[ERR]: " };
+static const char* const PREFIXES[LOG_LEVEL_NUMBER] = { "[DBG]: ", "[INFO]:", "[WARN]: ", "[ERR]: ", "" };
 
-static void PrintPrefix(const char* const message);
+static void PrintPrefix(const char* const message, uint8_t len);
 static void PrintMessage(const char* const message);
 static void PrintChar(char ch);
 static void PrintHex(uint32_t value);
 static void PrintDec(int32_t value);
 static void PrintNewLine(void);
+#if 0
+static void OnUartReadCompleted(void* context);
+#endif
 
-static void PrintPrefix(const char* const message)
+static void PrintPrefix(const char* const message, uint8_t len)
 {
-    uint8_t len = strlen(PREFIXES[m_logLevel]);
-    UartWrite(&m_uart, (uint8_t*)PREFIXES[m_logLevel], len);
+    UartWrite(&m_uart, (uint8_t*)message, len);
 }
 
 static void PrintMessage(const char* const message)
 {
-    PrintPrefix(PREFIXES[m_logLevel]);
+    uint8_t len = strlen(PREFIXES[m_logLevel]);
 
-    uint8_t len = strlen(message);
+    if (len != 0)
+    {
+        PrintPrefix(PREFIXES[m_logLevel], len);
+    }
+
+    len = strlen(message);
     UartWrite(&m_uart, (uint8_t*)message, len);
 }
 
@@ -87,6 +94,9 @@ static void PrintNewLine(void)
 void LogInit(void)
 {
     UartInit(&m_uart, UART_1, BAUD_921600);
+#if 0
+    UartRegisterReceiveHandler(&m_uart, &OnUartReadCompleted);
+#endif
 }
 
 void LogLevel(LOG_LEVEL level)
@@ -100,6 +110,11 @@ void LogPrint(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
+
+    if (m_logLevel == LOG_LEVEL_NONE)
+    {
+        return;
+    }
 
     while (*fmt)
     {
@@ -173,3 +188,37 @@ bool LogIdle(void)
 {
     return UartIdle(&m_uart);
 }
+#if 0
+static void OnUartReadCompleted(void* context)
+{
+    UART_Handle_t* handle = (UART_Handle_t*)context;
+
+    uint8_t item;
+    char buffer[128];
+    uint16_t index = 0;
+
+    while (BufferGet(&handle->rxBuffer, &item, sizeof(item)))
+    {
+        LogPrint("%c", item);
+
+        if (item == '\r')
+        {
+            PrintNewLine();
+
+            buffer[index] = '\0';
+            LogPrint("%s", "action");
+            index = 0;
+            return;
+        }
+        else if (index < sizeof(buffer) - 1)
+        {
+            buffer[index++] = item;
+        }
+    }
+#if 0
+    buffer[index] = '\0';
+    LogPrint("%s", buffer);
+#endif
+}
+#endif
+
