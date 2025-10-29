@@ -12,7 +12,10 @@
 #define DMA_2_CLOCK_ENABLE (RCC->AHB1ENR |= (RCC_AHB1ENR_DMA2EN))
 
 #define UART_RX_TIMEOUT     50     /* ms */
+
 #define TIM_2_CLOCK_ENABLE  (RCC->APB1ENR |= (RCC_APB1ENR_TIM2EN))
+#define TIM_3_CLOCK_ENABLE  (RCC->APB1ENR |= (RCC_APB1ENR_TIM3EN))
+#define TIM_4_CLOCK_ENABLE  (RCC->APB1ENR |= (RCC_APB1ENR_TIM4EN))
 
 static UART_Handle_t* m_UartIrq[UART_COUNT];
 
@@ -25,7 +28,8 @@ static void RxInterruptDisable(UART_Handle_t* const obj);
 static void TcInterruptEnable(UART_Handle_t* const obj);
 static void TcInterruptDisable(UART_Handle_t* const obj);
 
-static IRQn_Type GetIrqType(const UART_Handle_t* const obj);
+static IRQn_Type UartGetIrqType(const UART_Handle_t* const obj);
+static IRQn_Type TimerGetIrqType(const UART_Handle_t* const obj);
 
 static void UartOnInterrupt(UART_Handle_t* const obj);
 static void UartRxTimeout(UART_Handle_t* const obj);
@@ -39,7 +43,7 @@ static void UartEnable(UART_Handle_t* const obj);
 
 static void DMA_Config(UART_Handle_t* const obj, UART_NAMES uartName);
 
-static void TimerInit(UART_Handle_t* const obj, uint32_t timeoutMs);
+static void TimerInit(UART_Handle_t* const obj, UART_NAMES uartName, uint32_t timeoutMs);
 static void TimerStart(UART_Handle_t* const obj);
 
 /*Brief: Converts baud rate in to register value */
@@ -140,6 +144,8 @@ void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
 
             obj->instance->BRR = ComputeBaudRate(SystemCoreClock, baud);
 
+            obj->timer = TIM3;
+
             break;
 
         case UART_6:
@@ -151,6 +157,8 @@ void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
             obj->instance = USART6;
 
             obj->instance->BRR = ComputeBaudRate(SystemCoreClock, baud);
+
+            obj->timer = TIM4;
 
             break;
 
@@ -171,11 +179,11 @@ void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
     BufferCreate(&obj->txBuffer, &obj->txData, sizeof(obj->txData), sizeof(uint8_t), true);
     BufferCreate(&obj->rxBuffer, &obj->rxData, sizeof(obj->rxData), sizeof(uint8_t), true);
 
-    NVIC_EnableIRQ(GetIrqType(obj));
+    NVIC_EnableIRQ(UartGetIrqType(obj));
 
     m_UartIrq[obj->uartName] = obj;
 
-    TimerInit(obj, UART_RX_TIMEOUT);
+    TimerInit(obj, uartName, UART_RX_TIMEOUT);
 
     obj->initialized = true;
 }
@@ -269,7 +277,7 @@ static void TcInterruptDisable(UART_Handle_t* const obj)
     obj->instance->CR1 &= ~(USART_CR1_TCIE);
 }
 
-static IRQn_Type GetIrqType(const UART_Handle_t* const obj)
+static IRQn_Type UartGetIrqType(const UART_Handle_t* const obj)
 {
     ASSERT(obj != NULL);
 
@@ -287,6 +295,34 @@ static IRQn_Type GetIrqType(const UART_Handle_t* const obj)
 
         case UART_6:
             result = USART6_IRQn;
+            break;
+
+        default:
+            ASSERT(false);
+            break;
+    }
+
+    return result;
+}
+
+static IRQn_Type TimerGetIrqType(const UART_Handle_t* const obj)
+{
+    ASSERT(obj != NULL);
+
+    IRQn_Type result;
+
+    switch (obj->uartName)
+    {
+        case UART_1:
+            result = TIM2_IRQn;
+            break;
+
+        case UART_2:
+            result = TIM3_IRQn;
+            break;
+
+        case UART_6:
+            result = TIM4_IRQn;
             break;
 
         default:
@@ -396,11 +432,27 @@ static void UartEnable(UART_Handle_t* const obj)
     obj->instance->CR1 |= USART_CR1_UE;
 }
 
-static void TimerInit(UART_Handle_t* const obj, uint32_t timeoutMs)
+static void TimerInit(UART_Handle_t* const obj, UART_NAMES uartName, uint32_t timeoutMs)
 {
     ASSERT(obj != NULL);
 
-    TIM_2_CLOCK_ENABLE;
+    switch (uartName)
+    {
+        case UART_1:
+            TIM_2_CLOCK_ENABLE;
+            break;
+
+        case UART_2:
+            TIM_3_CLOCK_ENABLE;
+            break;
+
+        case UART_6:
+            TIM_4_CLOCK_ENABLE;
+            break;
+
+        default:
+            break;
+    }
 
     /* Prescaler value 16 Mhz / 16 = 1 khz (1 ms) */
     obj->timer->PSC = 16000 - 1;
@@ -414,8 +466,8 @@ static void TimerInit(UART_Handle_t* const obj, uint32_t timeoutMs)
     /* Update interrupt enabled */
     obj->timer->DIER |= TIM_DIER_UIE;
 
-    NVIC_EnableIRQ(TIM2_IRQn);
-    NVIC_SetPriority(TIM2_IRQn, 1);
+    NVIC_EnableIRQ(TimerGetIrqType(obj));
+    NVIC_SetPriority(TimerGetIrqType(obj), 1);
 }
 
 static void TimerStart(UART_Handle_t* const obj)
@@ -431,6 +483,16 @@ static void TimerStart(UART_Handle_t* const obj)
 void TIM2_IRQHandler(void)
 {
     UartRxTimeout(m_UartIrq[UART_1]);
+}
+
+void TIM3_IRQHandler(void)
+{
+    UartRxTimeout(m_UartIrq[UART_2]);
+}
+
+void TIM4_IRQHandler(void)
+{
+    UartRxTimeout(m_UartIrq[UART_6]);
 }
 
 #if 0
