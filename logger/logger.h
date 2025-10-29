@@ -14,12 +14,6 @@ typedef enum
     LOG_LEVEL_NUMBER
 } LOG_LEVEL;
 
-/*Brief: Logger initialization
- * [in] - none
- * [out] - none
- * */
-void LogInit(void);
-
 /*Brief: Set logger level
  * [in] - level - new level
  * [out] - none

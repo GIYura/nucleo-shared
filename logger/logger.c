@@ -3,12 +3,10 @@
 
 #include "assert.h"
 #include "logger.h"
-#include "uart.h"
+#include "uart-service.h"
 
-static UART_Handle_t m_uart;
 static LOG_LEVEL m_logLevel = LOG_LEVEL_DEBUG;
 
-const char* const NEW_LINE = "\r\n";
 static const char* const PREFIXES[LOG_LEVEL_NUMBER] = { "[DBG]: ", "[INFO]:", "[WARN]: ", "[ERR]: ", "" };
 
 static void PrintPrefix(const char* const message, uint8_t len);
@@ -17,13 +15,10 @@ static void PrintChar(char ch);
 static void PrintHex(uint32_t value);
 static void PrintDec(int32_t value);
 static void PrintNewLine(void);
-#if 0
-static void OnUartReadCompleted(void* context);
-#endif
 
 static void PrintPrefix(const char* const message, uint8_t len)
 {
-    UartWrite(&m_uart, (uint8_t*)message, len);
+    UartServiceSend((uint8_t*)PREFIXES[m_logLevel], len);
 }
 
 static void PrintMessage(const char* const message)
@@ -36,28 +31,38 @@ static void PrintMessage(const char* const message)
     }
 
     len = strlen(message);
-    UartWrite(&m_uart, (uint8_t*)message, len);
+
+    UartServiceSend((uint8_t*)message, len);
 }
 
 static void PrintChar(char ch)
 {
-    UartWrite(&m_uart, (uint8_t*)&ch, 1);
+    UartServiceSend((uint8_t*)&ch, sizeof(char));
 }
 
 static void PrintHex(uint32_t value)
 {
-    const char* hex = "0123456789ABCDEF";
-    char symbol;
+    const char* const HEX = "0123456789ABCDEF";
+    char symbol = 0;
     char hexPrefix[2] = {'0', 'x'};
+    char zeros[2] = {'0', '0'};
+    uint8_t index = 0;
 
-    UartWrite(&m_uart, (uint8_t*)hexPrefix, sizeof(hexPrefix));
+    UartServiceSend((uint8_t*)hexPrefix, sizeof(hexPrefix));
+
+    if (value == 0)
+    {
+        UartServiceSend((uint8_t*)zeros, sizeof(zeros));
+    }
 
     for (int8_t i = 28; i >= 0; i -= 4)
     {
-        symbol = hex[(value >> i) & 0xF];
+        index = (value >> i) & 0x0F;
+        symbol = HEX[index];
+
         if (symbol != '0')
         {
-            UartWrite(&m_uart, (uint8_t*)&symbol, sizeof(symbol));
+            UartServiceSend((uint8_t*)&symbol, sizeof(symbol));
         }
     }
 }
@@ -70,7 +75,7 @@ static void PrintDec(int32_t value)
 
     if (value < 0)
     {
-        UartWrite(&m_uart, (uint8_t*)&minus, sizeof(minus));
+        UartServiceSend((uint8_t*)&minus, sizeof(minus));
         value = -value;
     }
 
@@ -81,22 +86,17 @@ static void PrintDec(int32_t value)
 
     while (i--)
     {
-        UartWrite(&m_uart, (uint8_t*)&buff[i], sizeof(char));
+        UartServiceSend((uint8_t*)&buff[i], sizeof(char));
     }
 }
 
 static void PrintNewLine(void)
 {
-    uint8_t len = strlen(NEW_LINE);
-    UartWrite(&m_uart, (uint8_t*)NEW_LINE, len);
-}
+    const char* const NEW_LINE = "\r\n";
 
-void LogInit(void)
-{
-    UartInit(&m_uart, UART_1, BAUD_921600);
-#if 0
-    UartRegisterReceiveHandler(&m_uart, &OnUartReadCompleted);
-#endif
+    uint8_t len = strlen(NEW_LINE);
+
+    UartServiceSend((uint8_t*)NEW_LINE, len);
 }
 
 void LogLevel(LOG_LEVEL level)
@@ -164,6 +164,11 @@ void LogPrint(const char *fmt, ...)
                     break;
                 }
 
+                case '\r':
+                case '\n':
+                    PrintNewLine();
+                    break;
+
                 default:
                 {
                     PrintChar('?');
@@ -179,46 +184,11 @@ void LogPrint(const char *fmt, ...)
         fmt++;
     }
 
-    PrintNewLine();
-
     va_end(args);
 }
 
 bool LogIdle(void)
 {
-    return UartIdle(&m_uart);
+    return UartServiceIdle();
 }
-#if 0
-static void OnUartReadCompleted(void* context)
-{
-    UART_Handle_t* handle = (UART_Handle_t*)context;
-
-    uint8_t item;
-    char buffer[128];
-    uint16_t index = 0;
-
-    while (BufferGet(&handle->rxBuffer, &item, sizeof(item)))
-    {
-        LogPrint("%c", item);
-
-        if (item == '\r')
-        {
-            PrintNewLine();
-
-            buffer[index] = '\0';
-            LogPrint("%s", "action");
-            index = 0;
-            return;
-        }
-        else if (index < sizeof(buffer) - 1)
-        {
-            buffer[index++] = item;
-        }
-    }
-#if 0
-    buffer[index] = '\0';
-    LogPrint("%s", buffer);
-#endif
-}
-#endif
 
