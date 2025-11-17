@@ -13,6 +13,7 @@ Contains SW modules shared accross projects.
 | gpio            | GPIO diver                  |                              |
 | hw-timer        | HW timer driver             | TODO                         |
 | logger          | Serial logger               | UART1 (921600-8N1)           |
+| esp8266         | ESP8266 driver              |                              |
 | mpu             | Memory Protection Unit      |                              |
 | pwm             | PWM driver                  | TIM1 (refactor)              |
 | spi             | SPI driver                  |                              |
@@ -23,4 +24,5 @@ Contains SW modules shared accross projects.
 | radio           | Radio driver                | abstract interface           |
 | utils           | Helper macros               |                              |
 | freeRTOS-kernel | FreeRTOS kernel files       | FreeRTOS kernel V11.1.0      |
+
 
