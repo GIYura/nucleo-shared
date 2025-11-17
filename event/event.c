@@ -5,7 +5,7 @@
 #include "buffer.h"
 
 static Buffer_t m_eventQueue;
-static Event_t m_events[EVENT_QUEUE_SIZE +1];
+static Event_t m_events[EVENT_QUEUE_SIZE + 1];
 
 void EventQueueInit(void)
 {
