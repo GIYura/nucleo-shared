@@ -180,6 +180,7 @@ void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
     BufferCreate(&obj->rxBuffer, &obj->rxData, sizeof(obj->rxData), sizeof(uint8_t), true);
 
     NVIC_EnableIRQ(UartGetIrqType(obj));
+    NVIC_SetPriority(UartGetIrqType(obj), 1);
 
     m_UartIrq[obj->uartName] = obj;
 
@@ -454,11 +455,15 @@ static void TimerInit(UART_Handle_t* const obj, UART_NAMES uartName, uint32_t ti
             break;
     }
 
+    obj->timer->CR1 = 0;
+
     /* Prescaler value 16 Mhz / 16 = 1 khz (1 ms) */
     obj->timer->PSC = 16000 - 1;
 
     /* Auto-reload value */
     obj->timer->ARR = timeoutMs - 1;
+
+    obj->timer->EGR = TIM_EGR_UG;
 
     /* One-pulse mode */
     obj->timer->CR1 |= TIM_CR1_OPM;
@@ -467,12 +472,16 @@ static void TimerInit(UART_Handle_t* const obj, UART_NAMES uartName, uint32_t ti
     obj->timer->DIER |= TIM_DIER_UIE;
 
     NVIC_EnableIRQ(TimerGetIrqType(obj));
-    NVIC_SetPriority(TimerGetIrqType(obj), 1);
+    NVIC_SetPriority(TimerGetIrqType(obj), 5);
 }
 
 static void TimerStart(UART_Handle_t* const obj)
 {
     ASSERT(obj != NULL);
+
+    obj->timer->CR1 &= ~TIM_CR1_CEN;
+
+    obj->timer->SR &= ~TIM_SR_UIF;
 
     obj->timer->CNT = 0;
 

@@ -9,7 +9,7 @@
 #include "buffer.h"
 #include "gpio.h"
 
-#define TX_BUFFER_SIZE      1023
+#define BUFFER_SIZE      1023
 
 /* USART baud rate supported */
 #if 0
@@ -56,8 +56,8 @@ typedef struct
     Buffer_t txBuffer;
     Buffer_t rxBuffer;
     UART_EventHandler_t onRxDone;
-    uint8_t txData[TX_BUFFER_SIZE + 1];
-    uint8_t rxData[TX_BUFFER_SIZE + 1];
+    uint8_t txData[BUFFER_SIZE + 1];
+    uint8_t rxData[BUFFER_SIZE + 1];
     volatile bool isTransmitting;
     volatile bool isTransmitCompeted;
     TIM_TypeDef* timer;
