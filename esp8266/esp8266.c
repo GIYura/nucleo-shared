@@ -51,8 +51,8 @@ void ESP_SendCommand(const char* const command)
 {
     uint8_t commandLen = strlen(command);
 
-    UartWrite(&m_uart, (uint8_t*)command, commandLen);
-    UartWrite(&m_uart, (uint8_t*)"\r\n", 2);
+    UartWrite_IT(&m_uart, (uint8_t*)command, commandLen);
+    UartWrite_IT(&m_uart, (uint8_t*)"\r\n", 2);
 }
 
 void ESP_RegisterResponseHandler(ESP_ResponseHandler_t callback)

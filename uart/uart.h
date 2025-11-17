@@ -71,13 +71,13 @@ typedef struct
  * */
 void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud);
 
-/*Brief: Send message over UART
+/*Brief: Send message over UART in non-blocking mode
  * [in] - obj - pointer to UART handle
  * [in] - buff - pointer to buffer
  * [in] - size - buffer size
  * [out] - none
  * */
-void UartWrite(UART_Handle_t* const obj, const uint8_t* const buffer, uint8_t size);
+void UartWrite_IT(UART_Handle_t* const obj, const uint8_t* const buffer, uint8_t size);
 
 /*Brief: Register receive callback
  * [in] - obj - pointer to UART handle

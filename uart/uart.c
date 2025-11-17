@@ -189,7 +189,7 @@ void UartInit(UART_Handle_t* const obj, UART_NAMES uartName, BAUD_RATE baud)
     obj->initialized = true;
 }
 
-void UartWrite(UART_Handle_t* const obj, const uint8_t* const buffer, uint8_t size)
+void UartWrite_IT(UART_Handle_t* const obj, const uint8_t* const buffer, uint8_t size)
 {
     ASSERT(obj != NULL);
 

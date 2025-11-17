@@ -53,7 +53,7 @@ void UartServiceSend(const uint8_t* const data, uint8_t len)
 {
     ASSERT(data);
 
-    UartWrite(&m_uartService.uart, (uint8_t*)data, len);
+    UartWrite_IT(&m_uartService.uart, (uint8_t*)data, len);
 }
 
 void UartServiceRegisterRxCallback(UartRxCallback_t callback)
