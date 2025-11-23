@@ -1,6 +1,6 @@
 #include <stddef.h>
 
-#include "assert.h"
+#include "custom-assert.h"
 #include "uart-service.h"
 #include "uart.h"
 

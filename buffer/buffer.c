@@ -1,7 +1,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "assert.h"
+#include "custom-assert.h"
 #include "buffer.h"
 
 static uint16_t NextIndex(const Buffer_t* const buffer, uint16_t index)

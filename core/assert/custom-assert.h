@@ -1,5 +1,5 @@
-#ifndef ASSERT_H
-#define ASSERT_H
+#ifndef CUSTOM_ASSERT_H
+#define CUSTOM_ASSERT_H
 
 #include <stdint.h>
 
@@ -12,5 +12,5 @@ void ErrorHandler(const char* file, int line, const char* expr);
         } \
     } while (0)
 
-#endif /* ASSERT_H */
+#endif /* CUSTOM_ASSERT_H */
 

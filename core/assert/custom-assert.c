@@ -1,4 +1,4 @@
-#include "assert.h"
+#include "custom-assert.h"
 
 void ErrorHandler(const char* file, int line, const char* expr)
 {
@@ -7,3 +7,4 @@ void ErrorHandler(const char* file, int line, const char* expr)
 
     }
 }
+

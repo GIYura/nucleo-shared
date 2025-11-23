@@ -1,6 +1,6 @@
 #include <stddef.h>
 
-#include "assert.h"
+#include "custom-assert.h"
 #include "i2c.h"
 #include "ignore.h"
 

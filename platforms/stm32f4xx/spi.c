@@ -1,6 +1,6 @@
 #include <stddef.h>
 
-#include "assert.h"
+#include "custom-assert.h"
 #include "delay.h"
 #include "spi.h"
 #include "ignore.h"
