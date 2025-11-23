@@ -55,7 +55,7 @@ System-level functionality:
 
 - **freertos/** — FreeRTOS kernel sources  
 - **mpu/** — memory protection utilities  
-- **assert/** — project-wide assert system  
+- **custom-assert/** — project-wide assert system  
 
 ## 5. Utility Modules
 
@@ -65,3 +65,4 @@ Standalone helpers:
 - **delay/** — blocking delay functions  
 - **event/** — event queue system  
 - **utils/** — macros, helpers, small utilities  
+
