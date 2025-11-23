@@ -1,5 +1,5 @@
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef LOG_H
+#define LOG_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -14,7 +14,7 @@ typedef enum
     LOG_LEVEL_NUMBER
 } LOG_LEVEL;
 
-/*Brief: Set logger level
+/*Brief: Set log level
  * [in] - level - new level
  * [out] - none
  * */
@@ -32,4 +32,4 @@ void LogPrint(const char *fmt, ...);
  * */
 bool LogIdle(void);
 
-#endif /* LOGGER_H */
+#endif /* LOG_H */

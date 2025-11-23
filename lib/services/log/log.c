@@ -2,7 +2,7 @@
 #include <stdarg.h>
 
 #include "assert.h"
-#include "logger.h"
+#include "log.h"
 #include "uart-service.h"
 
 static LOG_LEVEL m_logLevel = LOG_LEVEL_DEBUG;
