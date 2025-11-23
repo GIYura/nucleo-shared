@@ -1,6 +1,7 @@
 ### Brief
 
-Contains SW modules shared accross projects.
+This repository contains a set of reusable software modules designed for different embedded platforms and applications. 
+The modules are organized in a way that allows them to be easily adapted and used across multiple MCUs and project types.
 
 ### Structure
 
