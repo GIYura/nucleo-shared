@@ -1,348 +1,417 @@
 #include <stddef.h>
+#include <stdbool.h>
+
+#include "stm32f411xe.h"
 
 #include "custom-assert.h"
 #include "gpio.h"
 
-#define INTERRUPT_MAX    16
+#define GPIO_IRQ_MAX            (16U)
+#define GPIO_PORT_MAX           (8U)
 
-static Gpio_t* m_GpioIrq[INTERRUPT_MAX];
+/* Port clock enable */
+#define GPIO_CLOCK_ENABLE_PORTA (RCC->AHB1ENR |= (RCC_AHB1ENR_GPIOAEN))
+#define GPIO_CLOCK_ENABLE_PORTB (RCC->AHB1ENR |= (RCC_AHB1ENR_GPIOBEN))
+#define GPIO_CLOCK_ENABLE_PORTC (RCC->AHB1ENR |= (RCC_AHB1ENR_GPIOCEN))
+#define GPIO_CLOCK_ENABLE_PORTD (RCC->AHB1ENR |= (RCC_AHB1ENR_GPIODEN))
+#define GPIO_CLOCK_ENABLE_PORTE (RCC->AHB1ENR |= (RCC_AHB1ENR_GPIOEEN))
+#define GPIO_CLOCK_ENABLE_PORTH (RCC->AHB1ENR |= (RCC_AHB1ENR_GPIOHEN))
 
-void GpioInit(  Gpio_t* const obj,
-                PIN_NAMES pinName,
-                PIN_MODES mode,
-                PIN_TYPES type,
-                PIN_SPEEDS speed,
-                PIN_CONFIGS config,
-                uint32_t value)
+/* System configuration controller clock enable */
+#define SYS_CLOCK_ENABLE        (RCC->APB2ENR |= (RCC_APB2ENR_SYSCFGEN))
+
+static GpioHandle_t* m_GpioIrq[GPIO_IRQ_MAX];
+
+static const GPIO_TypeDef* m_GpioPorts[GPIO_PORT_MAX] = {
+    GPIOA,
+    GPIOB,
+    GPIOC,
+    GPIOD,
+    GPIOE,
+    NULL,
+    NULL,
+    GPIOH
+};
+
+static GPIO_TypeDef* GpioGetPort(PIN_NAMES pinName)
 {
-    ASSERT(obj != NULL);
+    ASSERT(pinName != PIN_NC);
 
-    if (pinName == NC)
+    uint8_t port = (uint8_t)((pinName >> 4U) & 0x0F);
+
+    if (port == 0U) return GPIOA;
+    if (port == 1U) return GPIOB;
+    if (port == 2U) return GPIOC;
+    if (port == 3U) return GPIOD;
+    if (port == 4U) return GPIOE;
+    if (port == 5U) return GPIOH;
+
+    /* should never reach here */
+    return NULL;
+}
+static uint8_t GpioGetPinIndex(PIN_NAMES pinName)
+{
+    ASSERT(pinName != PIN_NC);
+
+    return (uint8_t)(pinName & 0x0F);
+}
+
+static uint32_t GpioGetExtiLine(const GPIO_TypeDef* const port)
+{
+    ASSERT(port != NULL);
+
+    for (uint32_t i = 0; i < GPIO_PORT_MAX; i++)
+    {
+        if (m_GpioPorts[i] == port)
+        {
+            return i;
+        }
+    }
+
+    /* should never reach here */
+    return 0xFF;
+}
+
+static void GpioEnableClocks(const GPIO_TypeDef* const port)
+{
+    ASSERT(port != NULL);
+
+    if (port == GPIOA)
+    {
+        GPIO_CLOCK_ENABLE_PORTA;
+        return;
+    }
+
+    if (port == GPIOB)
+    {
+        GPIO_CLOCK_ENABLE_PORTB;
+        return;
+    }
+
+    if (port == GPIOC)
+    {
+        GPIO_CLOCK_ENABLE_PORTC;
+        return;
+    }
+
+    if (port == GPIOD)
+    {
+        GPIO_CLOCK_ENABLE_PORTD;
+        return;
+    }
+
+    if (port == GPIOE)
+    {
+        GPIO_CLOCK_ENABLE_PORTE;
+        return;
+    }
+
+    if (port == GPIOH)
+    {
+        GPIO_CLOCK_ENABLE_PORTH;
+        return;
+    }
+}
+
+static void GpioSetSpeed(GPIO_TypeDef* port, uint32_t pinIndex, PIN_STRENGTH strength)
+{
+    ASSERT(port != NULL);
+
+    port->OSPEEDR &= ~(0x03U << (pinIndex * 2U));
+    port->OSPEEDR |= ((uint32_t)strength << (pinIndex * 2U));
+}
+
+static void GpioSetPull(GPIO_TypeDef* port, uint32_t pinIndex, PIN_TYPES pull)
+{
+    ASSERT(port != NULL);
+
+    port->PUPDR &= ~(0x03U << (pinIndex * 2U));
+    port->PUPDR |= ((uint32_t)pull << (pinIndex * 2U));
+}
+
+static void GpioSetMode(GPIO_TypeDef* port, uint32_t pinIndex, PIN_MODES mode)
+{
+    ASSERT(port != NULL);
+
+    port->MODER &= ~(0x03U << (pinIndex * 2U));
+    port->MODER |= ((uint32_t)mode << (pinIndex * 2U));
+}
+
+static void GpioSetState(GPIO_TypeDef* port, uint32_t pinIndex, uint32_t value)
+{
+    ASSERT(port != NULL);
+    ASSERT(value == PIN_STATE_LOW || value == PIN_STATE_HIGH);
+
+    if (value == PIN_STATE_LOW)
+    {
+        port->BSRR = (1U << (pinIndex + 16U));
+    }
+    else if (value == PIN_STATE_HIGH)
+    {
+        port->BSRR = (1U << (pinIndex));
+    }
+}
+
+static void GpioSetAlternateFunction(GPIO_TypeDef* port, uint32_t pinIndex, uint32_t af)
+{
+    ASSERT(port != NULL);
+    ASSERT(af < 16U);
+
+    uint32_t regIndex = (pinIndex < 8U) ? 0U : 1U;
+    uint32_t shift = (pinIndex % 8U) * 4U;
+    uint32_t mask = 0x0FU << shift;
+
+    port->AFR[regIndex] &= ~mask;
+    port->AFR[regIndex] |= ((af & 0x0FU) << shift);
+}
+
+static void GpioSetEdge(PIN_IRQ_MODES mode, uint32_t pinIndex)
+{
+    uint32_t mask = (1U << pinIndex);
+
+    /*clear all */
+    EXTI->RTSR &= ~mask;
+    EXTI->FTSR &= ~mask;
+
+    switch (mode)
+    {
+        case PIN_IRQ_RISING:
+            EXTI->RTSR |= mask;
+            break;
+
+        case PIN_IRQ_FALLING:
+            EXTI->FTSR |= mask;
+            break;
+
+        case PIN_IRQ_BOTH:
+            EXTI->RTSR |= mask;
+            EXTI->FTSR |= mask;
+            break;
+
+        default:
+            /* should never reach here */
+            ASSERT(false);
+            break;
+    }
+}
+
+static IRQn_Type GpioGetIrqNumber(uint32_t pinIndex)
+{
+    ASSERT(pinIndex < 16U);
+
+    if (pinIndex <= 4)
+    {
+        return (IRQn_Type)(EXTI0_IRQn + pinIndex);
+    }
+    else if (pinIndex <= 9)
+    {
+        return EXTI9_5_IRQn;
+    }
+    else
+    {
+        return EXTI15_10_IRQn;
+    }
+}
+
+static void GpioExtiHandler(uint8_t first, uint8_t last)
+{
+    for (uint8_t i = first; i <= last; i++)
+    {
+        uint32_t mask = (1U << i);
+
+        if (EXTI->PR & mask)
+        {
+            /*
+             * (rc_w1) Software can read as well as clear this bit by writing 1.
+             * Writing ‘0’ has no effect on the bit value.
+             * */
+            EXTI->PR = mask;
+
+            if (m_GpioIrq[i] != NULL && m_GpioIrq[i]->irqHandler != NULL)
+            {
+                (*m_GpioIrq[i]->irqHandler)();
+            }
+        }
+    }
+}
+
+void GpioInit(GpioHandle_t* handle,
+              PIN_NAMES pinName,
+              PIN_MODES mode,
+              PIN_TYPES pull,
+              PIN_STRENGTH strength,
+              PIN_CONFIGS config,
+              uint32_t value)
+{
+    ASSERT(handle != NULL);
+
+    if (pinName == PIN_NC)
     {
         return;
     }
 
-    obj->pinName = pinName;
-    obj->pinIndex = (obj->pinName & 0x0F);
+    GPIO_TypeDef* port = GpioGetPort(pinName);
+    uint8_t pinIndex = GpioGetPinIndex(pinName);
 
-    if ((obj->pinName & 0xF0) == 0x00)
-    {
-        obj->port = GPIOA;
-        GPIO_CLOCK_ENABLE_PORTA;
-    }
-    else if ((obj->pinName & 0xF0) == 0x10)
-    {
-        obj->port = GPIOB;
-        GPIO_CLOCK_ENABLE_PORTB;
-    }
-    else if ((obj->pinName & 0xF0) == 0x20)
-    {
-        obj->port = GPIOC;
-        GPIO_CLOCK_ENABLE_PORTC;
-    }
-    else if ((obj->pinName & 0xF0) == 0x30)
-    {
-        obj->port = GPIOD;
-        GPIO_CLOCK_ENABLE_PORTD;
-    }
-    else if ((obj->pinName & 0xF0) == 0x40)
-    {
-        obj->port = GPIOE;
-        GPIO_CLOCK_ENABLE_PORTE;
-    }
-    else if ((obj->pinName & 0xF0) == 0x50)
-    {
-        obj->port = GPIOH;
-        GPIO_CLOCK_ENABLE_PORTH;
-    }
-    else
-    {
-        ASSERT(0);
-    }
+    ASSERT(port != NULL);
 
-    obj->port->OSPEEDR &= ~(0x03 << (obj->pinIndex * 2));
-    obj->port->OSPEEDR |= (speed << (obj->pinIndex * 2));
+    handle->hw.stm32f411.port = port;
+    handle->hw.stm32f411.pinIndex = pinIndex;
 
-    obj->port->PUPDR &= ~(0x03 << (obj->pinIndex * 2));
-    obj->port->PUPDR |= (type << (obj->pinIndex * 2));
+    GpioEnableClocks(port);
+    GpioSetSpeed(port, pinIndex, strength);
+    GpioSetPull(port, pinIndex, pull);
+    GpioSetMode(port, pinIndex, mode);
 
-    obj->port->MODER &= ~(0x03 << (obj->pinIndex * 2));
-    obj->port->MODER |= (mode << (obj->pinIndex * 2));
+    /* 0: Output push-pull (reset state) */
+    port->OTYPER &= ~(1U << pinIndex);
+
+    if (config == PIN_CONFIG_OPEN_DRAIN)
+    {
+        /* 1: Output open-drain */
+        port->OTYPER |= (1U << pinIndex);
+    }
 
     if (mode == PIN_MODE_ALTERNATE)
     {
-        if (config == PIN_CONFIG_OPEN_DRAIN)
-        {
-            obj->port->OTYPER |= (config << (obj->pinIndex));
-        }
-
-        if (obj->pinIndex < 8)
-        {
-            obj->port->AFR[0] |= (value << (obj->pinIndex * 4));
-        }
-        else
-        {
-            obj->port->AFR[1] |= (value << ((obj->pinIndex % 8) * 4));
-        }
+        GpioSetAlternateFunction(port, pinIndex, value);
+        return;
     }
 
     if (mode == PIN_MODE_OUTPUT)
     {
-        obj->port->OTYPER |= (config << (obj->pinIndex));
-
-        if (value == PIN_STATE_LOW)
-        {
-            obj->port->BSRR = (1 << (obj->pinIndex + 16));
-        }
-        else
-        {
-            obj->port->BSRR = (1 << (obj->pinIndex));
-        }
+        GpioSetState(port, pinIndex, value);
     }
 }
 
-void GpioWrite(const Gpio_t* const obj, uint32_t value)
+void GpioWrite(const GpioHandle_t* const handle, PIN_STATES state)
 {
-    ASSERT(obj != NULL);
+    ASSERT(handle != NULL);
 
-    if (obj->pinName == NC)
-    {
-        return;
-    }
+    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->hw.stm32f411.port;
+    uint8_t pinIndex = handle->hw.stm32f411.pinIndex;
 
-    if (value)
+    GpioSetState(port, pinIndex, state);
+}
+
+uint16_t GpioRead(const GpioHandle_t* const handle)
+{
+    ASSERT(handle != NULL);
+
+    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->hw.stm32f411.port;
+    uint8_t pinIndex = handle->hw.stm32f411.pinIndex;
+
+    uint16_t value = (uint16_t)(port->IDR & (1U << pinIndex));
+
+    value &= (1U<< (pinIndex));
+
+    return value ? 1U : 0U;
+}
+
+void GpioToggle(const GpioHandle_t* const handle)
+{
+    ASSERT(handle != NULL);
+
+    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->hw.stm32f411.port;
+    uint8_t pinIndex = handle->hw.stm32f411.pinIndex;
+
+    uint32_t odr = port->ODR;
+
+    if (odr & (1 << pinIndex))
     {
-        obj->port->BSRR = (1 << (obj->pinIndex));
+        GpioSetState(port, pinIndex, PIN_STATE_LOW);
     }
     else
     {
-        obj->port->BSRR = (1 << (obj->pinIndex + 16));
+        GpioSetState(port, pinIndex, PIN_STATE_HIGH);
     }
 }
 
-uint32_t GpioRead(const Gpio_t* const obj)
+void GpioSetInterrupt(GpioHandle_t* const handle, PIN_IRQ_MODES mode, uint8_t priority, GpioIrqHandler handler)
 {
-    ASSERT(obj != NULL);
-
-    uint16_t value = obj->port->IDR;
-
-    value &= (1 << (obj->pinIndex));
-
-    return value ? 1 : 0;
-}
-
-void GpioToggle(const Gpio_t* const obj)
-{
-    ASSERT(obj != NULL);
-
-    uint32_t odr = (obj->port->ODR);
-
-    if (odr & (1 << obj->pinIndex))
-    {
-        obj->port->BSRR = (1 << (obj->pinIndex + 16));
-    }
-    else
-    {
-        obj->port->BSRR = (1 << (obj->pinIndex));
-    }
-}
-
-void GpioSetInterrupt(Gpio_t* obj, PIN_IRQ_MODES irqMode, PIN_IRQ_PRIORITIES irqPriority, GpioIrqHandler* const handler)
-{
-    ASSERT(obj != NULL);
+    ASSERT(handle != NULL);
     ASSERT(handler != NULL);
 
-    if (obj->pinName == NC)
-    {
-        return;
-    }
+    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->hw.stm32f411.port;
+    uint8_t pinIndex = handle->hw.stm32f411.pinIndex;
+    uint32_t mask = (1U << pinIndex);
 
-    for (uint8_t i = 0; i < INTERRUPT_MAX; i++)
+    for (uint8_t i = 0; i < GPIO_IRQ_MAX; i++)
     {
-        if (m_GpioIrq[i] != NULL && m_GpioIrq[i]->pinIndex == obj->pinIndex)
+        if (m_GpioIrq[i] != NULL && m_GpioIrq[i]->hw.stm32f411.pinIndex == pinIndex)
         {
             return;
         }
     }
 
-    obj->irqHandler = handler;
+    handle->irqHandler = handler;
 
-    /* System configuration controller clock enable */
-    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+    SYS_CLOCK_ENABLE;
 
-    uint8_t extiReg = (obj->pinIndex / 4);
-    uint8_t extiIndex = (obj->pinIndex % 4) * 4;
-    uint8_t extiValue = 0x00;
-    IRQn_Type irqNum = EXTI0_IRQn;
+    uint8_t extiReg = (pinIndex / 4);
+    uint8_t extiIndex = (pinIndex % 4) * 4;
+    uint8_t extiValue = GpioGetExtiLine(port);
+    IRQn_Type irqNum = GpioGetIrqNumber(pinIndex);
 
-    if ((obj->pinName & 0xF0) == 0x00)
-    {
-        extiValue = 0x00;
-    }
-    else if ((obj->pinName & 0xF0) == 0x10)
-    {
-        extiValue = 0x01;
-    }
-    else if ((obj->pinName & 0xF0) == 0x20)
-    {
-        extiValue = 0x02;
-    }
-    else if ((obj->pinName & 0xF0) == 0x30)
-    {
-        extiValue = 0x03;
-    }
-    else if ((obj->pinName & 0xF0) == 0x40)
-    {
-        extiValue = 0x04;
-    }
-    else if ((obj->pinName & 0xF0) == 0x50)
-    {
-        extiValue = 0x07;
-    }
+    ASSERT(extiValue != 0xff);
 
-    /* clear and set */
+    /* assign lines EXTIx to ports PA..PH */
     SYSCFG->EXTICR[extiReg] &= ~(0x0F << extiIndex);
     SYSCFG->EXTICR[extiReg] |= (extiValue << extiIndex);
 
-    /* enable interrupt */
-    EXTI->IMR |= (1 << obj->pinIndex);
+    /* disable line on IMR */
+    EXTI->IMR &= ~mask;
 
-    /* edge setup */
-    switch (irqMode)
+    GpioSetEdge(mode, pinIndex);
+
+    /* clear pending on EXTI */
+    if (EXTI->PR & mask)
     {
-        case PIN_IRQ_RISING:
-            EXTI->RTSR |= (1 << obj->pinIndex);
-            break;
-
-        case PIN_IRQ_FALING:
-            EXTI->FTSR |= (1 << obj->pinIndex);
-            break;
-
-        default:
-            EXTI->RTSR |= (1 << obj->pinIndex);
-            EXTI->FTSR |= (1 << obj->pinIndex);
-            break;
+        EXTI->PR = mask;
     }
 
-    if (obj->pinIndex <= 4)
-    {
-        irqNum += obj->pinIndex;
-    }
-    else if (obj->pinIndex <= 9)
-    {
-        irqNum = EXTI9_5_IRQn;
-    }
-    else
-    {
-        irqNum = EXTI15_10_IRQn;
-    }
+    NVIC_ClearPendingIRQ(irqNum);
 
-    m_GpioIrq[obj->pinIndex] = obj;
+    m_GpioIrq[pinIndex] = handle;
 
-    if (NVIC_GetPendingIRQ(irqNum) != 0)
-    {
-        EXTI->PR |= (1 << obj->pinIndex);
-        NVIC_ClearPendingIRQ(irqNum);
-    }
-
-    NVIC_SetPriority(irqNum, irqPriority);
+    NVIC_SetPriority(irqNum, priority);
     NVIC_EnableIRQ(irqNum);
+
+    /* enable line on IMR */
+    EXTI->IMR |= mask;
 }
 
 void EXTI0_IRQHandler(void)
 {
-    if (EXTI->PR & (1 << 0))
-    {
-        EXTI->PR |= (1 << 0);
-
-        if (m_GpioIrq[0]->irqHandler != NULL)
-        {
-            (*m_GpioIrq[0]->irqHandler)();
-        }
-    }
+    GpioExtiHandler(0, 0);
 }
 
 void EXTI1_IRQHandler(void)
 {
-    if (EXTI->PR & (1 << 1))
-    {
-        EXTI->PR |= (1 << 1);
-
-        if (m_GpioIrq[1]->irqHandler != NULL)
-        {
-            (*m_GpioIrq[1]->irqHandler)();
-        }
-    }
+    GpioExtiHandler(1, 1);
 }
 
 void EXTI2_IRQHandler(void)
 {
-    if (EXTI->PR & (1 << 2))
-    {
-        EXTI->PR |= (1 << 2);
-
-        if (m_GpioIrq[2]->irqHandler != NULL)
-        {
-            (*m_GpioIrq[2]->irqHandler)();
-        }
-    }
+    GpioExtiHandler(2, 2);
 }
 
 void EXTI3_IRQHandler(void)
 {
-    if (EXTI->PR & (1 << 3))
-    {
-        EXTI->PR |= (1 << 3);
-
-        if (m_GpioIrq[3]->irqHandler != NULL)
-        {
-            (*m_GpioIrq[3]->irqHandler)();
-        }
-    }
+    GpioExtiHandler(3, 3);
 }
 
 void EXTI4_IRQHandler(void)
 {
-    if (EXTI->PR & (1 << 4))
-    {
-        EXTI->PR |= (1 << 4);
-
-        if (m_GpioIrq[4]->irqHandler != NULL)
-        {
-            (*m_GpioIrq[4]->irqHandler)();
-        }
-    }
+    GpioExtiHandler(4, 4);
 }
 
 void EXTI9_5_IRQHandler(void)
 {
-    for (uint8_t i = 5; i <= 9; i++)
-    {
-        if (EXTI->PR & (1 << i))
-        {
-            EXTI->PR |= (1 << i);
-
-            if (m_GpioIrq[i]->irqHandler != NULL)
-            {
-                (*m_GpioIrq[i]->irqHandler)();
-            }
-        }
-    }
+    GpioExtiHandler(5, 9);
 }
 
 void EXTI15_10_IRQHandler(void)
 {
-    for (uint8_t i = 10; i <= 15; i++)
-    {
-        if (EXTI->PR & (1 << i))
-        {
-            EXTI->PR |= (1 << i);
-
-            if (m_GpioIrq[i]->irqHandler != NULL)
-            {
-                (*m_GpioIrq[i]->irqHandler)();
-            }
-        }
-    }
+    GpioExtiHandler(10, 15);
 }
-
