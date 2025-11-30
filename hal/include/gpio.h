@@ -3,10 +3,7 @@
 
 #include <stdint.h>
 
-typedef enum
-{
-    PIN_NC = 0xFFFFFFFF
-} PIN_NAMES;
+#define PIN_NC                  (-1)
 
 /* pin direction / mode */
 typedef enum
@@ -60,7 +57,6 @@ typedef void (*GpioIrqHandler)(void);
 
 typedef struct
 {
-    PIN_NAMES pin;
     GpioIrqHandler irqHandler;
 
     union
@@ -73,7 +69,9 @@ typedef struct
 
         struct
         {
-            uint32_t pinNumber;
+            uint32_t base;
+            uint8_t pinMask;
+            uint8_t pinIndex;
         } cc3220;
 
         struct
@@ -87,18 +85,18 @@ typedef struct
 } GpioHandle_t;
 
 /*Brief: Gpio initialization
- * [in] - obj - pointer to gpio object
- * [in] - pinName - name of the pin defined in gpio-name.h
+ * [in] - handle - pointer to gpio object
+ * [in] - pin - name of the pin defined in platforms/gpio-name.h
  * [in] - mode - gpio mode
  * [in] - pull - gpio pull-up/pull-down
  * [in] - strength - gpio speed
  * [in] - config - gpio config
- * [in] - initVal - gpio default value
+ * [in] - value - gpio default value
  * NOTE: this param can be used as alternate function
  * [out] - none
  * */
 void GpioInit(GpioHandle_t* const handle,
-              PIN_NAMES pinName,
+              uint8_t pin,
               PIN_MODES mode,
               PIN_TYPES pull,
               PIN_STRENGTH strength,

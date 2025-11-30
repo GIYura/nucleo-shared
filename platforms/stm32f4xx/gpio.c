@@ -20,7 +20,7 @@
 /* System configuration controller clock enable */
 #define SYS_CLOCK_ENABLE        (RCC->APB2ENR |= (RCC_APB2ENR_SYSCFGEN))
 
-static GpioHandle_t* m_GpioIrq[GPIO_IRQ_MAX];
+static GpioHandle_t* m_GpioIrq[GPIO_IRQ_MAX] = {NULL};
 
 static const GPIO_TypeDef* m_GpioPorts[GPIO_PORT_MAX] = {
     GPIOA,
@@ -33,11 +33,11 @@ static const GPIO_TypeDef* m_GpioPorts[GPIO_PORT_MAX] = {
     GPIOH
 };
 
-static GPIO_TypeDef* GpioGetPort(PIN_NAMES pinName)
+static GPIO_TypeDef* GpioGetPort(uint8_t pin)
 {
-    ASSERT(pinName != PIN_NC);
+    ASSERT(pin != PIN_NC);
 
-    uint8_t port = (uint8_t)((pinName >> 4U) & 0x0F);
+    uint8_t port = (uint8_t)((pin >> 4U) & 0x0F);
 
     if (port == 0U) return GPIOA;
     if (port == 1U) return GPIOB;
@@ -49,11 +49,11 @@ static GPIO_TypeDef* GpioGetPort(PIN_NAMES pinName)
     /* should never reach here */
     return NULL;
 }
-static uint8_t GpioGetPinIndex(PIN_NAMES pinName)
+static uint8_t GpioGetPinIndex(uint8_t pin)
 {
-    ASSERT(pinName != PIN_NC);
+    ASSERT(pin != PIN_NC);
 
-    return (uint8_t)(pinName & 0x0F);
+    return (uint8_t)(pin & 0x0F);
 }
 
 static uint32_t GpioGetExtiLine(const GPIO_TypeDef* const port)
@@ -236,7 +236,7 @@ static void GpioExtiHandler(uint8_t first, uint8_t last)
 }
 
 void GpioInit(GpioHandle_t* handle,
-              PIN_NAMES pinName,
+              uint8_t pin,
               PIN_MODES mode,
               PIN_TYPES pull,
               PIN_STRENGTH strength,
@@ -245,18 +245,19 @@ void GpioInit(GpioHandle_t* handle,
 {
     ASSERT(handle != NULL);
 
-    if (pinName == PIN_NC)
+    if (pin == PIN_NC)
     {
         return;
     }
 
-    GPIO_TypeDef* port = GpioGetPort(pinName);
-    uint8_t pinIndex = GpioGetPinIndex(pinName);
+    GPIO_TypeDef* port = GpioGetPort(pin);
+    uint8_t pinIndex = GpioGetPinIndex(pin);
 
     ASSERT(port != NULL);
 
     handle->hw.stm32f411.port = port;
     handle->hw.stm32f411.pinIndex = pinIndex;
+    handle->irqHandler = NULL;
 
     GpioEnableClocks(port);
     GpioSetSpeed(port, pinIndex, strength);
