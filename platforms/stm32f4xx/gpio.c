@@ -17,10 +17,21 @@
 #define GPIO_CLOCK_ENABLE_PORTE (RCC->AHB1ENR |= (RCC_AHB1ENR_GPIOEEN))
 #define GPIO_CLOCK_ENABLE_PORTH (RCC->AHB1ENR |= (RCC_AHB1ENR_GPIOHEN))
 
+/* Port clock disable */
+#define GPIO_CLOCK_DISABLE_PORTA (RCC->AHB1ENR &= ~(RCC_AHB1ENR_GPIOAEN))
+#define GPIO_CLOCK_DISABLE_PORTB (RCC->AHB1ENR &= ~(RCC_AHB1ENR_GPIOBEN))
+#define GPIO_CLOCK_DISABLE_PORTC (RCC->AHB1ENR &= ~(RCC_AHB1ENR_GPIOCEN))
+#define GPIO_CLOCK_DISABLE_PORTD (RCC->AHB1ENR &= ~(RCC_AHB1ENR_GPIODEN))
+#define GPIO_CLOCK_DISABLE_PORTE (RCC->AHB1ENR &= ~(RCC_AHB1ENR_GPIOEEN))
+#define GPIO_CLOCK_DISABLE_PORTH (RCC->AHB1ENR &= ~(RCC_AHB1ENR_GPIOHEN))
+
 /* System configuration controller clock enable */
 #define SYS_CLOCK_ENABLE        (RCC->APB2ENR |= (RCC_APB2ENR_SYSCFGEN))
 
-static GpioHandle_t* m_GpioIrq[GPIO_IRQ_MAX] = {NULL};
+/* System configuration controller clock disable */
+#define SYS_CLOCK_DISABLE        (RCC->APB2ENR &= ~(RCC_APB2ENR_SYSCFGEN))
+
+static GpioHandle_t* m_GpioIrq[GPIO_IRQ_MAX] = { NULL };
 
 static const GPIO_TypeDef* m_GpioPorts[GPIO_PORT_MAX] = {
     GPIOA,
@@ -70,6 +81,47 @@ static uint32_t GpioGetExtiLine(const GPIO_TypeDef* const port)
 
     /* should never reach here */
     return 0xFF;
+}
+
+static void GpioDisableClocks(const GPIO_TypeDef* const port)
+{
+    ASSERT(port != NULL);
+
+    if (port == GPIOA)
+    {
+        GPIO_CLOCK_DISABLE_PORTA;
+        return;
+    }
+
+    if (port == GPIOB)
+    {
+        GPIO_CLOCK_DISABLE_PORTB;
+        return;
+    }
+
+    if (port == GPIOC)
+    {
+        GPIO_CLOCK_DISABLE_PORTC;
+        return;
+    }
+
+    if (port == GPIOD)
+    {
+        GPIO_CLOCK_DISABLE_PORTD;
+        return;
+    }
+
+    if (port == GPIOE)
+    {
+        GPIO_CLOCK_DISABLE_PORTE;
+        return;
+    }
+
+    if (port == GPIOH)
+    {
+        GPIO_CLOCK_DISABLE_PORTH;
+        return;
+    }
 }
 
 static void GpioEnableClocks(const GPIO_TypeDef* const port)
@@ -235,7 +287,7 @@ static void GpioExtiHandler(uint8_t first, uint8_t last)
     }
 }
 
-void GpioInit(GpioHandle_t* handle,
+static void GpioOpen(GpioHandle_t* handle,
               uint8_t pin,
               PIN_MODES mode,
               PIN_TYPES pull,
@@ -244,6 +296,7 @@ void GpioInit(GpioHandle_t* handle,
               uint32_t value)
 {
     ASSERT(handle != NULL);
+    ASSERT(handle->ops != NULL);
 
     if (pin == PIN_NC)
     {
@@ -255,8 +308,8 @@ void GpioInit(GpioHandle_t* handle,
 
     ASSERT(port != NULL);
 
-    handle->hw.stm32f411.port = port;
-    handle->hw.stm32f411.pinIndex = pinIndex;
+    handle->gpio.stm32f411.port = port;
+    handle->gpio.stm32f411.pinIndex = pinIndex;
     handle->irqHandler = NULL;
 
     GpioEnableClocks(port);
@@ -273,6 +326,8 @@ void GpioInit(GpioHandle_t* handle,
         port->OTYPER |= (1U << pinIndex);
     }
 
+    handle->initialized = true;
+
     if (mode == PIN_MODE_ALTERNATE)
     {
         GpioSetAlternateFunction(port, pinIndex, value);
@@ -285,36 +340,68 @@ void GpioInit(GpioHandle_t* handle,
     }
 }
 
-void GpioWrite(const GpioHandle_t* const handle, PIN_STATES state)
+static void GpioClose(GpioHandle_t* const handle)
 {
     ASSERT(handle != NULL);
+    ASSERT(handle->ops != NULL);
 
-    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->hw.stm32f411.port;
-    uint8_t pinIndex = handle->hw.stm32f411.pinIndex;
+    handle->initialized = false;
+
+    GpioDisableClocks(handle->gpio.stm32f411.port);
+
+    SYS_CLOCK_DISABLE;
+
+/*TODO:disable interrupts */
+}
+
+static void GpioWrite(const GpioHandle_t* const handle, PIN_STATES state)
+{
+    ASSERT(handle != NULL);
+    ASSERT(handle->ops != NULL);
+
+    if (!handle->initialized)
+    {
+        return;
+    }
+
+    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->gpio.stm32f411.port;
+    uint8_t pinIndex = handle->gpio.stm32f411.pinIndex;
 
     GpioSetState(port, pinIndex, state);
 }
 
-uint16_t GpioRead(const GpioHandle_t* const handle)
+static uint16_t GpioRead(const GpioHandle_t* const handle)
 {
     ASSERT(handle != NULL);
+    ASSERT(handle->ops != NULL);
 
-    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->hw.stm32f411.port;
-    uint8_t pinIndex = handle->hw.stm32f411.pinIndex;
+    if (!handle->initialized)
+    {
+        return 0xFF;
+    }
+
+    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->gpio.stm32f411.port;
+    uint8_t pinIndex = handle->gpio.stm32f411.pinIndex;
 
     uint16_t value = (uint16_t)(port->IDR & (1U << pinIndex));
 
-    value &= (1U<< (pinIndex));
+    value &= (1U << (pinIndex));
 
     return value ? 1U : 0U;
 }
 
-void GpioToggle(const GpioHandle_t* const handle)
+static void GpioToggle(const GpioHandle_t* const handle)
 {
     ASSERT(handle != NULL);
+    ASSERT(handle->ops != NULL);
 
-    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->hw.stm32f411.port;
-    uint8_t pinIndex = handle->hw.stm32f411.pinIndex;
+    if (!handle->initialized)
+    {
+        return;
+    }
+
+    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->gpio.stm32f411.port;
+    uint8_t pinIndex = handle->gpio.stm32f411.pinIndex;
 
     uint32_t odr = port->ODR;
 
@@ -328,18 +415,24 @@ void GpioToggle(const GpioHandle_t* const handle)
     }
 }
 
-void GpioSetInterrupt(GpioHandle_t* const handle, PIN_IRQ_MODES mode, uint8_t priority, GpioIrqHandler handler)
+static void GpioSetInterrupt(GpioHandle_t* const handle, PIN_IRQ_MODES mode, uint8_t priority, GpioIrqHandler handler)
 {
     ASSERT(handle != NULL);
     ASSERT(handler != NULL);
+    ASSERT(handle->ops != NULL);
 
-    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->hw.stm32f411.port;
-    uint8_t pinIndex = handle->hw.stm32f411.pinIndex;
+    if (!handle->initialized)
+    {
+        return;
+    }
+
+    GPIO_TypeDef* port = (GPIO_TypeDef*)handle->gpio.stm32f411.port;
+    uint8_t pinIndex = handle->gpio.stm32f411.pinIndex;
     uint32_t mask = (1U << pinIndex);
 
     for (uint8_t i = 0; i < GPIO_IRQ_MAX; i++)
     {
-        if (m_GpioIrq[i] != NULL && m_GpioIrq[i]->hw.stm32f411.pinIndex == pinIndex)
+        if (m_GpioIrq[i] != NULL && m_GpioIrq[i]->gpio.stm32f411.pinIndex == pinIndex)
         {
             return;
         }
@@ -416,3 +509,13 @@ void EXTI15_10_IRQHandler(void)
 {
     GpioExtiHandler(10, 15);
 }
+
+/* Gpio operations */
+const GpioOps_t g_GpioOps = {
+    .open = &GpioOpen,
+    .close = &GpioClose,
+    .read = &GpioRead,
+    .write = &GpioWrite,
+    .toggle = &GpioToggle,
+    .interrupt = &GpioSetInterrupt
+};
