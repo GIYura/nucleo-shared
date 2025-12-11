@@ -2,7 +2,9 @@
 #define GPIO_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
+/* Gpio not connected */
 #define PIN_NC                  (-1)
 
 /* pin direction / mode */
@@ -55,8 +57,12 @@ typedef enum
 
 typedef void (*GpioIrqHandler)(void);
 
+typedef struct GpioOps GpioOps_t;
+
 typedef struct
 {
+    const GpioOps_t* ops;
+
     GpioIrqHandler irqHandler;
 
     union
@@ -81,54 +87,60 @@ typedef struct
             volatile uint8_t* pinReg;
             uint8_t bit;
         } atmega328;
-    } hw;
+    } gpio;
+
+    bool initialized;
+
 } GpioHandle_t;
 
-/*Brief: Gpio initialization
- * [in] - handle - pointer to gpio object
- * [in] - pin - name of the pin defined in platforms/gpio-name.h
- * [in] - mode - gpio mode
- * [in] - pull - gpio pull-up/pull-down
- * [in] - strength - gpio speed
- * [in] - config - gpio config
- * [in] - value - gpio default value
- * NOTE: this param can be used as alternate function
- * [out] - none
- * */
-void GpioInit(GpioHandle_t* const handle,
-              uint8_t pin,
-              PIN_MODES mode,
-              PIN_TYPES pull,
-              PIN_STRENGTH strength,
-              PIN_CONFIGS config,
-              uint32_t value);
+struct GpioOps
+{
+/*Brief: Gpio open
+* [in] - handle - pointer to gpio object
+* [in] - pin - name of the pin defined in platforms/gpio-name.h
+* [in] - mode - gpio mode
+* [in] - pull - gpio pull-up/pull-down
+* [in] - strength - gpio speed
+* [in] - config - gpio config
+* [in] - value - gpio default value
+* NOTE: this param can be used as alternate function
+* [out] - none
+* */
+    void (*open)(GpioHandle_t* const handle, uint8_t pin, PIN_MODES mode, PIN_TYPES pull, PIN_STRENGTH strength, PIN_CONFIGS config, uint32_t value);
 
 /*Brief: Gpio write
- * [in] - handle - pointer to gpio object
- * [in] - value - new gpio value
- * [out] - none
- * */
-void GpioWrite(const GpioHandle_t* const handle, PIN_STATES state);
+* [in] - handle - pointer to gpio object
+* [in] - value - new gpio value
+* [out] - none
+* */
+    void (*write)(const GpioHandle_t* const handle, PIN_STATES state);
 
 /*Brief: Gpio read
- * [in] - handle - pointer to gpio object
- * [out] - value - gpio state
- * */
-uint16_t GpioRead(const GpioHandle_t* const handle);
+* [in] - handle - pointer to gpio object
+* [out] - value - gpio state
+* */
+    uint16_t (*read)(const GpioHandle_t* const handle);
 
 /*Brief: Gpio toggle
- * [in] - handle - pointer to gpio object
- * [out] - none
- * */
-void GpioToggle(const GpioHandle_t* const handle);
+* [in] - handle - pointer to gpio object
+* [out] - none
+* */
+    void (*toggle)(const GpioHandle_t* const handle);
+
+/*Brief: Gpio close
+* [in] - handle - pointer to gpio object
+* [out] - none
+* */
+    void (*close)(GpioHandle_t* const handle);
 
 /*Brief: Gpio IRQ initialization
- * [in] - handle - pointer to gpio object
- * [in] - mode - IRQ mode
- * [in] - priority - IRQ priority
- * [in] - handler - callback function pointer
- * [out] - none
- * */
-void GpioSetInterrupt(GpioHandle_t* const handle, PIN_IRQ_MODES mode, uint8_t priority, GpioIrqHandler handler);
+* [in] - handle - pointer to gpio object
+* [in] - mode - IRQ mode
+* [in] - priority - IRQ priority
+* [in] - handler - callback function pointer
+* [out] - none
+* */
+    void (*interrupt)(GpioHandle_t* const handle, PIN_IRQ_MODES mode, uint8_t priority, GpioIrqHandler handler);
+};
 
 #endif /* GPIO_H */
