@@ -18,10 +18,13 @@ The `hal/include/` directory defines clean, MCU-agnostic APIs:
 
 Each MCU has its own folder under `platforms/`:
 
-- `gpio.c`  
-- `uart.c`  
-- `spi.c`  
-- `i2c.c`  
+`MCU/`
+- gpio.c — MCU specific gpio implementation
+- gpio-name.h - MCU gpio naming
+
+`boot/` — platform-specific startup and linker script files
+
+`config/` — platform-specific makefiles
 
 These files contain the actual register-level implementation of the HAL API.
 
