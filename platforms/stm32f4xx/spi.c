@@ -1,5 +1,5 @@
 #include <stddef.h>
-
+#if 0
 #include "custom-assert.h"
 #include "delay.h"
 #include "spi.h"
@@ -560,3 +560,4 @@ void SPI5_IRQHandler(void)
 {
     SpiIrqHandler(m_SpiIrq[SPI_5]);
 }
+#endif

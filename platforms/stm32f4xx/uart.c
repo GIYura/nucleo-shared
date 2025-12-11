@@ -1,6 +1,6 @@
 #include <stdbool.h>
 #include <stddef.h>
-
+#if 0
 #include "custom-assert.h"
 #include "uart.h"
 
@@ -567,4 +567,5 @@ static void DMA_Config(UART_Handle_t* const obj, UART_NAMES uartName)
             break;
     }
 }
+#endif
 #endif

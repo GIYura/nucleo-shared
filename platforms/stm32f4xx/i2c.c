@@ -1,5 +1,5 @@
 #include <stddef.h>
-
+#if 0
 #include "custom-assert.h"
 #include "i2c.h"
 #include "ignore.h"
@@ -985,3 +985,5 @@ static void I2C_DisableBufferInterrupt(const I2C_Handle_t* const obj)
 
     obj->instance->CR2 &= ~(I2C_CR2_ITBUFEN);
 }
+#endif
+
