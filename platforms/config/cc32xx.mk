@@ -3,11 +3,6 @@
 ##############################################
 
 ##############################################
-# TOOLCHAIN
-##############################################
-TOOLCHAIN_PREFIX = arm-none-eabi-
-
-##############################################
 # CORE/MCU
 ##############################################
 CPU = cortex-m4
@@ -21,7 +16,7 @@ TI_SDK = /opt/ti/simplelink_cc32xx_sdk_7_10_00_13
 ##############################################
 # Linker
 ##############################################
-LINKER_SCRIPT = $(SRCDIR)/platform-boot/cc32xx/cc32xxsf_nortos.lds
+LINKER_SCRIPT = $(SUBMODULES)/platforms/boot/cc32xx/cc32xx.ld
 
 ##############################################
 # DEFINES
@@ -41,4 +36,4 @@ PLATFORM_DIRS = \
 ##############################################
 # START-UP
 ##############################################
-PLATFORM_BOOT_DIR = $(SRCDIR)/platform-boot/cc32xx
+PLATFORM_BOOT = $(SUBMODULES)/platforms/boot/cc32xx
