@@ -1,5 +1,5 @@
 #include <stddef.h>
-
+#if 0
 #include "custom-assert.h"
 #include "uart-service.h"
 #include "uart.h"
@@ -66,3 +66,4 @@ bool UartServiceIdle(void)
     return UartIdle(&m_uartService.uart);
 }
 
+#endif
